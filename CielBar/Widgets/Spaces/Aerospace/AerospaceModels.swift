@@ -34,15 +34,23 @@ struct AeroSpace: SpaceModel {
     let workspace: String
     var id: String { workspace }
     var isFocused: Bool = false
+    var hasFocusMetadata: Bool = false
     var windows: [AeroWindow] = []
 
     enum CodingKeys: String, CodingKey {
         case workspace
+        case isFocused = "workspace-is-focused"
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         workspace = try container.decode(String.self, forKey: .workspace)
+        if let isFocused = try container.decodeIfPresent(
+            Bool.self, forKey: .isFocused)
+        {
+            self.isFocused = isFocused
+            hasFocusMetadata = true
+        }
     }
 
     init(workspace: String, isFocused: Bool = false, windows: [AeroWindow] = [])
