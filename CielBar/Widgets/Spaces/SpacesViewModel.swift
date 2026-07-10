@@ -4,7 +4,11 @@ import Foundation
 
 class SpacesViewModel: ObservableObject {
     @Published var spaces: [AnySpace] = []
+    private let fallbackRefreshInterval: TimeInterval = 10
     private var provider: AnySpacesProvider?
+    private var fallbackRefreshTimer: Timer?
+    private var appActivationObserver: NSObjectProtocol?
+    private var systemWakeObserver: NSObjectProtocol?
     private lazy var refreshScheduler = SpacesRefreshScheduler(
         snapshotLoader: { [weak self] in
             self?.loadSpacesSnapshot() ?? []
@@ -33,9 +37,46 @@ class SpacesViewModel: ObservableObject {
 
     private func startMonitoring() {
         requestRefresh(reason: "initial")
+
+        fallbackRefreshTimer = Timer.scheduledTimer(
+            withTimeInterval: fallbackRefreshInterval,
+            repeats: true
+        ) { [weak self] _ in
+            self?.requestRefresh(reason: "fallback-poll")
+        }
+
+        appActivationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.requestRefresh(reason: "app-activated")
+        }
+
+        systemWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.requestRefresh(reason: "system-wake")
+        }
     }
 
     private func stopMonitoring() {
+        fallbackRefreshTimer?.invalidate()
+        fallbackRefreshTimer = nil
+
+        if let appActivationObserver {
+            NotificationCenter.default.removeObserver(appActivationObserver)
+            self.appActivationObserver = nil
+        }
+
+        if let systemWakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(
+                systemWakeObserver)
+            self.systemWakeObserver = nil
+        }
+
         refreshScheduler.stop()
     }
 
