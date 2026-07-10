@@ -28,6 +28,7 @@ enum SpacesChangeReason: String {
     case focusSpace = "focus-space"
     case focusSpaceWindow = "focus-space-window"
     case focusWindow = "focus-window"
+    case providerLifecycle = "provider-lifecycle"
 }
 
 protocol SpacesEventMonitoring {

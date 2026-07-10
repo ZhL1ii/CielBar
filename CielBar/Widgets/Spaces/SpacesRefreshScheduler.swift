@@ -1,8 +1,13 @@
 import Foundation
 
+struct SpacesRefreshSnapshot {
+    let spaces: [AnySpace]
+    let providerGeneration: Int
+}
+
 final class SpacesRefreshScheduler {
-    typealias SnapshotLoader = () -> [AnySpace]
-    typealias PublishHandler = ([AnySpace]) -> Void
+    typealias SnapshotLoader = () -> SpacesRefreshSnapshot?
+    typealias PublishHandler = (SpacesRefreshSnapshot) -> Bool
 
     private let debounceInterval: TimeInterval
     private let stateQueue = DispatchQueue(
@@ -78,35 +83,47 @@ final class SpacesRefreshScheduler {
         isRunning = true
         refreshQueue.async { [weak self] in
             guard let self else { return }
-            let spaces = self.snapshotLoader()
-            self.finishRefresh(spaces: spaces, reason: reason)
+            let snapshot = self.snapshotLoader()
+            self.finishRefresh(snapshot: snapshot, reason: reason)
         }
     }
 
-    private func finishRefresh(spaces: [AnySpace], reason: String) {
+    private func finishRefresh(
+        snapshot: SpacesRefreshSnapshot?, reason: String
+    ) {
         stateQueue.async { [weak self] in
             guard let self else { return }
-
-            self.isRunning = false
             guard !self.isStopped else { return }
 
-            let shouldPublish = spaces != self.lastPublishedSpaces
-            if shouldPublish {
-                self.lastPublishedSpaces = spaces
+            guard let snapshot,
+                snapshot.spaces != self.lastPublishedSpaces
+            else {
+                self.completeRefreshLocked(reason: reason)
+                return
             }
 
-            let shouldRunFollowUp = self.needsFollowUpRefresh
-            self.needsFollowUpRefresh = false
-
-            if shouldPublish {
-                DispatchQueue.main.async { [publishHandler] in
-                    publishHandler(spaces)
+            DispatchQueue.main.async { [weak self, publishHandler] in
+                let wasPublished = publishHandler(snapshot)
+                self?.stateQueue.async { [weak self] in
+                    guard let self else { return }
+                    if wasPublished {
+                        self.lastPublishedSpaces = snapshot.spaces
+                    }
+                    self.completeRefreshLocked(reason: reason)
                 }
             }
+        }
+    }
 
-            if shouldRunFollowUp {
-                self.scheduleRefreshLocked(reason: reason)
-            }
+    private func completeRefreshLocked(reason: String) {
+        isRunning = false
+        guard !isStopped else { return }
+
+        let shouldRunFollowUp = needsFollowUpRefresh
+        needsFollowUpRefresh = false
+
+        if shouldRunFollowUp {
+            scheduleRefreshLocked(reason: reason)
         }
     }
 }
