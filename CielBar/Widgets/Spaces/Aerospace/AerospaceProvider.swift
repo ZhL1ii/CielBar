@@ -7,6 +7,7 @@ class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
     let executablePath = ConfigManager.shared.config.aerospace.path
     private var eventMonitor: AerospaceEventMonitor?
     private var supportsWorkspaceFocusMetadata: Bool?
+    private var supportsWindowAppIdentityMetadata: Bool?
 
     deinit {
         stopMonitoring()
@@ -137,12 +138,28 @@ class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
     }
 
     private func fetchWindows() -> [AeroWindow]? {
-        guard
-            let data = runAerospaceCommand(arguments: [
+        if supportsWindowAppIdentityMetadata != false {
+            let windows = fetchWindows(arguments: [
                 "list-windows", "--all", "--json", "--format",
-                "%{window-id} %{app-name} %{window-title} %{workspace}",
+                "%{window-id} %{app-name} %{app-bundle-id} "
+                    + "%{app-bundle-path} %{app-pid} %{window-title} "
+                    + "%{workspace}",
             ])
-        else {
+            if let windows {
+                supportsWindowAppIdentityMetadata = true
+                return windows
+            }
+            supportsWindowAppIdentityMetadata = false
+        }
+
+        return fetchWindows(arguments: [
+            "list-windows", "--all", "--json", "--format",
+            "%{window-id} %{app-name} %{window-title} %{workspace}",
+        ])
+    }
+
+    private func fetchWindows(arguments: [String]) -> [AeroWindow]? {
+        guard let data = runAerospaceCommand(arguments: arguments) else {
             return nil
         }
         let decoder = JSONDecoder()

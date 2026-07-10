@@ -10,8 +10,10 @@ protocol WindowModel: Identifiable, Equatable, Codable {
     var id: Int { get }
     var title: String { get }
     var appName: String? { get }
+    var appBundleId: String? { get }
+    var appBundlePath: String? { get }
+    var appPid: Int? { get }
     var isFocused: Bool { get }
-    var appIcon: NSImage? { get set }
 }
 
 protocol SpacesProvider {
@@ -54,7 +56,11 @@ struct AnyWindow: Identifiable, Equatable {
         self.title = window.title
         self.appName = window.appName
         self.isFocused = window.isFocused
-        self.appIcon = window.appIcon
+        self.appIcon = AppIconResolver.shared.icon(
+            bundleIdentifier: window.appBundleId,
+            bundlePath: window.appBundlePath,
+            processIdentifier: window.appPid,
+            appName: window.appName)
     }
 
     static func == (lhs: AnyWindow, rhs: AnyWindow) -> Bool {

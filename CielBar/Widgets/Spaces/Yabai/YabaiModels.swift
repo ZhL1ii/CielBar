@@ -1,12 +1,14 @@
-import AppKit
+import Foundation
 
 struct YabaiWindow: WindowModel {
     let id: Int
     let title: String
     let appName: String?
+    let appBundleId: String? = nil
+    let appBundlePath: String? = nil
+    let appPid: Int?
     let isFocused: Bool
     let stackIndex: Int
-    var appIcon: NSImage?
     let isHidden: Bool
     let isFloating: Bool
     let isSticky: Bool
@@ -17,6 +19,7 @@ struct YabaiWindow: WindowModel {
         case spaceId = "space"
         case title
         case appName = "app"
+        case appPid = "pid"
         case isFocused = "has-focus"
         case stackIndex = "stack-index"
         case isHidden = "is-hidden"
@@ -32,15 +35,13 @@ struct YabaiWindow: WindowModel {
             try container.decodeIfPresent(String.self, forKey: .title)
             ?? "Unnamed"
         appName = try container.decodeIfPresent(String.self, forKey: .appName)
+        appPid = try container.decodeIfPresent(Int.self, forKey: .appPid)
         isFocused = try container.decode(Bool.self, forKey: .isFocused)
         stackIndex =
             try container.decodeIfPresent(Int.self, forKey: .stackIndex) ?? 0
         isHidden = try container.decode(Bool.self, forKey: .isHidden)
         isFloating = try container.decode(Bool.self, forKey: .isFloating)
         isSticky = try container.decode(Bool.self, forKey: .isSticky)
-        if let name = appName {
-            appIcon = IconCache.shared.icon(for: name)
-        }
     }
 }
 

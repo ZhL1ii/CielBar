@@ -1,17 +1,22 @@
-import AppKit
+import Foundation
 
 struct AeroWindow: WindowModel {
     let id: Int
     let title: String
     let appName: String?
+    let appBundleId: String?
+    let appBundlePath: String?
+    let appPid: Int?
     var isFocused: Bool = false
-    var appIcon: NSImage?
     let workspace: String?
 
     enum CodingKeys: String, CodingKey {
         case id = "window-id"
         case title = "window-title"
         case appName = "app-name"
+        case appBundleId = "app-bundle-id"
+        case appBundlePath = "app-bundle-path"
+        case appPid = "app-pid"
         case workspace
     }
 
@@ -20,12 +25,14 @@ struct AeroWindow: WindowModel {
         id = try container.decode(Int.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)
         appName = try container.decodeIfPresent(String.self, forKey: .appName)
+        appBundleId = try container.decodeIfPresent(
+            String.self, forKey: .appBundleId)
+        appBundlePath = try container.decodeIfPresent(
+            String.self, forKey: .appBundlePath)
+        appPid = try container.decodeIfPresent(Int.self, forKey: .appPid)
         workspace = try container.decodeIfPresent(
             String.self, forKey: .workspace)
         isFocused = false
-        if let name = appName {
-            appIcon = IconCache.shared.icon(for: name)
-        }
     }
 }
 

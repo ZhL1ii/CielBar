@@ -282,25 +282,3 @@ class SpacesViewModel: ObservableObject {
         return generation == providerGeneration
     }
 }
-
-class IconCache {
-    static let shared = IconCache()
-    private let cache = NSCache<NSString, NSImage>()
-    private init() {}
-    func icon(for appName: String) -> NSImage? {
-        if let cached = cache.object(forKey: appName as NSString) {
-            return cached
-        }
-        let workspace = NSWorkspace.shared
-        if let app = workspace.runningApplications.first(where: {
-            $0.localizedName == appName
-        }),
-            let bundleURL = app.bundleURL
-        {
-            let icon = workspace.icon(forFile: bundleURL.path)
-            cache.setObject(icon, forKey: appName as NSString)
-            return icon
-        }
-        return nil
-    }
-}
