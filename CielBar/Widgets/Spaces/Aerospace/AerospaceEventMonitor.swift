@@ -1,15 +1,37 @@
 import Foundation
 
-final class AerospaceEventMonitor {
-    typealias ChangeHandler = (SpacesChangeReason) -> Void
+enum AerospaceEventJSONLParser {
+    private struct Payload: Decodable {
+        let event: String
 
-    private static let subscribedEvents = [
+        enum CodingKeys: String, CodingKey {
+            case event = "_event"
+        }
+    }
+
+    static let relevantEvents = [
         "focus-changed",
         "focused-workspace-changed",
         "focused-monitor-changed",
         "window-detected",
     ]
-    private static let subscribedEventNames = Set(subscribedEvents)
+    private static let relevantEventNames = Set(relevantEvents)
+
+    static func isRelevantEvent(_ line: Data) -> Bool {
+        guard
+            let payload = try? JSONDecoder().decode(Payload.self, from: line)
+        else {
+            return false
+        }
+        return relevantEventNames.contains(payload.event)
+    }
+}
+
+final class AerospaceEventMonitor {
+    typealias ChangeHandler = (SpacesChangeReason) -> Void
+
+    private static let subscribedEvents =
+        AerospaceEventJSONLParser.relevantEvents
 
     private let executablePath: String
     private let stateQueue = DispatchQueue(
@@ -110,12 +132,7 @@ final class AerospaceEventMonitor {
     }
 
     private func handleLineLocked(_ line: Data) {
-        guard !line.isEmpty,
-            let object = try? JSONSerialization.jsonObject(with: line),
-            let payload = object as? [String: Any],
-            let event = payload["_event"] as? String,
-            Self.subscribedEventNames.contains(event)
-        else {
+        guard AerospaceEventJSONLParser.isRelevantEvent(line) else {
             return
         }
 
