@@ -1,8 +1,29 @@
 import Foundation
 
-class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider {
+class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
+    SpacesEventMonitoring
+{
     typealias SpaceType = AeroSpace
     let executablePath = ConfigManager.shared.config.aerospace.path
+    private var eventMonitor: AerospaceEventMonitor?
+
+    deinit {
+        stopMonitoring()
+    }
+
+    func startMonitoring(
+        onChange: @escaping (SpacesChangeReason) -> Void
+    ) {
+        if eventMonitor == nil {
+            eventMonitor = AerospaceEventMonitor(
+                executablePath: executablePath)
+        }
+        eventMonitor?.startMonitoring(onChange: onChange)
+    }
+
+    func stopMonitoring() {
+        eventMonitor?.stopMonitoring()
+    }
 
     func getSpacesWithWindows() -> [AeroSpace]? {
         guard var spaces = fetchSpaces(), let windows = fetchWindows() else {
