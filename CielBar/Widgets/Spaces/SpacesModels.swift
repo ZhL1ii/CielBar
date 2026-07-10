@@ -19,6 +19,23 @@ protocol SpacesProvider {
     func getSpacesWithWindows() -> [SpaceType]?
 }
 
+enum SpacesChangeReason: String {
+    case initial
+    case fallbackPoll = "fallback-poll"
+    case appActivated = "app-activated"
+    case systemWake = "system-wake"
+    case providerEvent = "provider-event"
+    case focusSpace = "focus-space"
+    case focusSpaceWindow = "focus-space-window"
+    case focusWindow = "focus-window"
+}
+
+protocol SpacesEventMonitoring {
+    func startMonitoring(
+        onChange: @escaping (SpacesChangeReason) -> Void)
+    func stopMonitoring()
+}
+
 protocol SwitchableSpacesProvider: SpacesProvider {
     func focusSpace(spaceId: String, needWindowFocus: Bool)
     func focusWindow(windowId: String)
@@ -72,6 +89,10 @@ class AnySpacesProvider {
     private let _getSpacesWithWindows: () -> [AnySpace]?
     private let _focusSpace: ((String, Bool) -> Void)?
     private let _focusWindow: ((String) -> Void)?
+    private let _startMonitoring: (
+        @escaping (SpacesChangeReason) -> Void
+    ) -> Void
+    private let _stopMonitoring: () -> Void
 
     init<P: SpacesProvider>(_ provider: P) {
         _getSpacesWithWindows = {
@@ -89,6 +110,18 @@ class AnySpacesProvider {
             _focusSpace = nil
             _focusWindow = nil
         }
+
+        if let eventMonitor = provider as? any SpacesEventMonitoring {
+            _startMonitoring = { onChange in
+                eventMonitor.startMonitoring(onChange: onChange)
+            }
+            _stopMonitoring = {
+                eventMonitor.stopMonitoring()
+            }
+        } else {
+            _startMonitoring = { _ in }
+            _stopMonitoring = {}
+        }
     }
 
     func getSpacesWithWindows() -> [AnySpace]? {
@@ -101,5 +134,15 @@ class AnySpacesProvider {
 
     func focusWindow(windowId: String) {
         _focusWindow?(windowId)
+    }
+
+    func startMonitoring(
+        onChange: @escaping (SpacesChangeReason) -> Void
+    ) {
+        _startMonitoring(onChange)
+    }
+
+    func stopMonitoring() {
+        _stopMonitoring()
     }
 }

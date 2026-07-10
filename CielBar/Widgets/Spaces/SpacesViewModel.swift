@@ -36,13 +36,17 @@ class SpacesViewModel: ObservableObject {
     }
 
     private func startMonitoring() {
-        requestRefresh(reason: "initial")
+        provider?.startMonitoring { [weak self] reason in
+            self?.requestRefresh(reason: reason)
+        }
+
+        requestRefresh(reason: .initial)
 
         fallbackRefreshTimer = Timer.scheduledTimer(
             withTimeInterval: fallbackRefreshInterval,
             repeats: true
         ) { [weak self] _ in
-            self?.requestRefresh(reason: "fallback-poll")
+            self?.requestRefresh(reason: .fallbackPoll)
         }
 
         appActivationObserver = NotificationCenter.default.addObserver(
@@ -50,7 +54,7 @@ class SpacesViewModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.requestRefresh(reason: "app-activated")
+            self?.requestRefresh(reason: .appActivated)
         }
 
         systemWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -58,11 +62,13 @@ class SpacesViewModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.requestRefresh(reason: "system-wake")
+            self?.requestRefresh(reason: .systemWake)
         }
     }
 
     private func stopMonitoring() {
+        provider?.stopMonitoring()
+
         fallbackRefreshTimer?.invalidate()
         fallbackRefreshTimer = nil
 
@@ -80,8 +86,8 @@ class SpacesViewModel: ObservableObject {
         refreshScheduler.stop()
     }
 
-    func requestRefresh(reason: String) {
-        refreshScheduler.requestRefresh(reason: reason)
+    func requestRefresh(reason: SpacesChangeReason) {
+        refreshScheduler.requestRefresh(reason: reason.rawValue)
     }
 
     private func loadSpacesSnapshot() -> [AnySpace] {
@@ -97,13 +103,13 @@ class SpacesViewModel: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.provider?.focusSpace(
                 spaceId: space.id, needWindowFocus: needWindowFocus)
-            self?.requestRefresh(reason: "focus-space")
+            self?.requestRefresh(reason: .focusSpace)
 
             if needWindowFocus {
                 DispatchQueue.global(qos: .userInitiated).asyncAfter(
                     deadline: .now() + 0.2
                 ) { [weak self] in
-                    self?.requestRefresh(reason: "focus-space-window")
+                    self?.requestRefresh(reason: .focusSpaceWindow)
                 }
             }
         }
@@ -112,7 +118,7 @@ class SpacesViewModel: ObservableObject {
     func switchToWindow(_ window: AnyWindow) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.provider?.focusWindow(windowId: String(window.id))
-            self?.requestRefresh(reason: "focus-window")
+            self?.requestRefresh(reason: .focusWindow)
         }
     }
 }
