@@ -3,9 +3,37 @@ import Foundation
 enum AerospaceEventJSONLParser {
     private struct Payload: Decodable {
         let event: String
+        let workspace: String?
+        let windowID: Int?
 
         enum CodingKeys: String, CodingKey {
             case event = "_event"
+            case workspace
+            case windowID = "windowId"
+        }
+    }
+
+    struct Event {
+        let name: String
+        let workspace: String?
+        let windowID: Int?
+
+        var focusChange: SpacesFocusChange? {
+            guard let workspace else { return nil }
+            switch name {
+            case "focus-changed":
+                return SpacesFocusChange(
+                    workspaceID: workspace,
+                    windowID: windowID,
+                    updatesWindowFocus: true)
+            case "focused-workspace-changed":
+                return SpacesFocusChange(
+                    workspaceID: workspace,
+                    windowID: nil,
+                    updatesWindowFocus: false)
+            default:
+                return nil
+            }
         }
     }
 
@@ -18,17 +46,25 @@ enum AerospaceEventJSONLParser {
     private static let relevantEventNames = Set(relevantEvents)
 
     static func isRelevantEvent(_ line: Data) -> Bool {
+        parseRelevantEvent(line) != nil
+    }
+
+    static func parseRelevantEvent(_ line: Data) -> Event? {
         guard
-            let payload = try? JSONDecoder().decode(Payload.self, from: line)
+            let payload = try? JSONDecoder().decode(Payload.self, from: line),
+            relevantEventNames.contains(payload.event)
         else {
-            return false
+            return nil
         }
-        return relevantEventNames.contains(payload.event)
+        return Event(
+            name: payload.event,
+            workspace: payload.workspace,
+            windowID: payload.windowID)
     }
 }
 
 final class AerospaceEventMonitor {
-    typealias ChangeHandler = (SpacesChangeReason) -> Void
+    typealias ChangeHandler = (SpacesProviderChange) -> Void
 
     private static let subscribedEvents =
         AerospaceEventJSONLParser.relevantEvents
@@ -132,12 +168,17 @@ final class AerospaceEventMonitor {
     }
 
     private func handleLineLocked(_ line: Data) {
-        guard AerospaceEventJSONLParser.isRelevantEvent(line) else {
+        guard
+            let event = AerospaceEventJSONLParser.parseRelevantEvent(line)
+        else {
             return
         }
 
         retryAttempt = 0
-        onChange?(.providerEvent)
+        onChange?(
+            SpacesProviderChange(
+                reason: .providerEvent,
+                focusChange: event.focusChange))
     }
 
     private func handleTerminationLocked(_ process: Process) {

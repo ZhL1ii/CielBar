@@ -30,6 +30,7 @@ class SpacesViewModel: ObservableObject {
     private var systemWakeObserver: NSObjectProtocol?
     private var appLaunchObserver: NSObjectProtocol?
     private var appTerminationObserver: NSObjectProtocol?
+    private var pendingFocusChange: SpacesFocusChange?
     private lazy var refreshScheduler = SpacesRefreshScheduler(
         snapshotLoader: { [weak self] in
             self?.loadSpacesSnapshot()
@@ -145,8 +146,43 @@ class SpacesViewModel: ObservableObject {
         guard isCurrentProviderGeneration(snapshot.providerGeneration) else {
             return false
         }
-        spaces = snapshot.spaces
+        var spacesToPublish = snapshot.spaces
+        if let pendingFocusChange {
+            if snapshot.spaces.contains(where: {
+                $0.id == pendingFocusChange.workspaceID
+            }) && snapshot.spaces.allSatisfy({
+                $0.matches(pendingFocusChange)
+            }) {
+                self.pendingFocusChange = nil
+            } else {
+                spacesToPublish = snapshot.spaces.map {
+                    $0.applying(pendingFocusChange)
+                }
+            }
+        }
+        spaces = spacesToPublish
         return true
+    }
+
+    private func applyFocusChange(_ focusChange: SpacesFocusChange) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if let pendingFocusChange = self.pendingFocusChange,
+                pendingFocusChange.workspaceID == focusChange.workspaceID,
+                !focusChange.updatesWindowFocus
+            {
+                self.pendingFocusChange = pendingFocusChange
+            } else {
+                self.pendingFocusChange = focusChange
+            }
+
+            let updatedSpaces = self.spaces.map {
+                $0.applying(focusChange)
+            }
+            if updatedSpaces != self.spaces {
+                self.spaces = updatedSpaces
+            }
+        }
     }
 
     func switchToSpace(_ space: AnySpace, needWindowFocus: Bool = false) {
@@ -223,16 +259,27 @@ class SpacesViewModel: ObservableObject {
         let providerTransition = replaceProviderState(
             provider: newProvider, kind: selectedKind)
         let newProviderGeneration = providerTransition.generation
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                self.isCurrentProviderGeneration(newProviderGeneration)
+            else {
+                return
+            }
+            self.pendingFocusChange = nil
+        }
         providerTransition.oldProvider?.stopMonitoring()
 
-        newProvider?.startMonitoring { [weak self] changeReason in
+        newProvider?.startMonitoring { [weak self] providerChange in
             guard let self,
                 self.isCurrentProviderGeneration(
                     newProviderGeneration)
             else {
                 return
             }
-            self.requestRefresh(reason: changeReason)
+            if let focusChange = providerChange.focusChange {
+                self.applyFocusChange(focusChange)
+            }
+            self.requestRefresh(reason: providerChange.reason)
         }
 
         requestRefresh(reason: reason)

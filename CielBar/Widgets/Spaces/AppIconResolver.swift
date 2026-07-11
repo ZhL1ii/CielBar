@@ -146,7 +146,7 @@ final class AppIconResolver {
             let application = workspace.runningApplications.first(where: {
                 $0.localizedName == appName
             })
-        {
+        else {
             return nil
         }
         return icon(for: application, workspace: workspace)

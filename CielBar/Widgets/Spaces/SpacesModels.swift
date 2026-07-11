@@ -33,9 +33,28 @@ enum SpacesChangeReason: String {
     case providerLifecycle = "provider-lifecycle"
 }
 
+struct SpacesFocusChange {
+    let workspaceID: String
+    let windowID: Int?
+    let updatesWindowFocus: Bool
+}
+
+struct SpacesProviderChange {
+    let reason: SpacesChangeReason
+    let focusChange: SpacesFocusChange?
+
+    init(
+        reason: SpacesChangeReason,
+        focusChange: SpacesFocusChange? = nil
+    ) {
+        self.reason = reason
+        self.focusChange = focusChange
+    }
+}
+
 protocol SpacesEventMonitoring {
     func startMonitoring(
-        onChange: @escaping (SpacesChangeReason) -> Void)
+        onChange: @escaping (SpacesProviderChange) -> Void)
     func stopMonitoring()
 }
 
@@ -63,6 +82,29 @@ struct AnyWindow: Identifiable, Equatable {
             appName: window.appName)
     }
 
+    private init(
+        id: Int,
+        title: String,
+        appName: String?,
+        isFocused: Bool,
+        appIcon: NSImage?
+    ) {
+        self.id = id
+        self.title = title
+        self.appName = appName
+        self.isFocused = isFocused
+        self.appIcon = appIcon
+    }
+
+    func updatingFocus(_ isFocused: Bool) -> AnyWindow {
+        AnyWindow(
+            id: id,
+            title: title,
+            appName: appName,
+            isFocused: isFocused,
+            appIcon: appIcon)
+    }
+
     static func == (lhs: AnyWindow, rhs: AnyWindow) -> Bool {
         return lhs.id == rhs.id && lhs.title == rhs.title
             && lhs.appName == rhs.appName && lhs.isFocused == rhs.isFocused
@@ -86,6 +128,43 @@ struct AnySpace: Identifiable, Equatable {
         self.windows = space.windows.map { AnyWindow($0) }
     }
 
+    private init(id: String, isFocused: Bool, windows: [AnyWindow]) {
+        self.id = id
+        self.isFocused = isFocused
+        self.windows = windows
+    }
+
+    func applying(_ focusChange: SpacesFocusChange) -> AnySpace {
+        let isTargetWorkspace = id == focusChange.workspaceID
+        let updatedWindows = windows.map { window in
+            if focusChange.updatesWindowFocus {
+                return window.updatingFocus(
+                    isTargetWorkspace && window.id == focusChange.windowID)
+            }
+            if !isTargetWorkspace {
+                return window.updatingFocus(false)
+            }
+            return window
+        }
+        return AnySpace(
+            id: id,
+            isFocused: isTargetWorkspace,
+            windows: updatedWindows)
+    }
+
+    func matches(_ focusChange: SpacesFocusChange) -> Bool {
+        guard isFocused == (id == focusChange.workspaceID) else {
+            return false
+        }
+        guard focusChange.updatesWindowFocus else { return true }
+
+        return windows.allSatisfy { window in
+            window.isFocused
+                == (id == focusChange.workspaceID
+                    && window.id == focusChange.windowID)
+        }
+    }
+
     static func == (lhs: AnySpace, rhs: AnySpace) -> Bool {
         return lhs.id == rhs.id && lhs.isFocused == rhs.isFocused
             && lhs.windows == rhs.windows
@@ -97,7 +176,7 @@ class AnySpacesProvider {
     private let _focusSpace: ((String, Bool) -> Void)?
     private let _focusWindow: ((String) -> Void)?
     private let _startMonitoring: (
-        @escaping (SpacesChangeReason) -> Void
+        @escaping (SpacesProviderChange) -> Void
     ) -> Void
     private let _stopMonitoring: () -> Void
 
@@ -144,7 +223,7 @@ class AnySpacesProvider {
     }
 
     func startMonitoring(
-        onChange: @escaping (SpacesChangeReason) -> Void
+        onChange: @escaping (SpacesProviderChange) -> Void
     ) {
         _startMonitoring(onChange)
     }

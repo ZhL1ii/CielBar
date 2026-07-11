@@ -14,7 +14,7 @@ class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
     }
 
     func startMonitoring(
-        onChange: @escaping (SpacesChangeReason) -> Void
+        onChange: @escaping (SpacesProviderChange) -> Void
     ) {
         if eventMonitor == nil {
             eventMonitor = AerospaceEventMonitor(

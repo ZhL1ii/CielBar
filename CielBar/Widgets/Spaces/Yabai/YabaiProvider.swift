@@ -12,12 +12,14 @@ class YabaiSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
     }
 
     func startMonitoring(
-        onChange: @escaping (SpacesChangeReason) -> Void
+        onChange: @escaping (SpacesProviderChange) -> Void
     ) {
         if eventMonitor == nil {
             eventMonitor = YabaiSignalMonitor(executablePath: executablePath)
         }
-        eventMonitor?.startMonitoring(onChange: onChange)
+        eventMonitor?.startMonitoring { reason in
+            onChange(SpacesProviderChange(reason: reason))
+        }
     }
 
     func stopMonitoring() {
