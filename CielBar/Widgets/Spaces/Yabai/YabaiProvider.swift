@@ -1,8 +1,30 @@
 import Foundation
 
-class YabaiSpacesProvider: SpacesProvider, SwitchableSpacesProvider {
+class YabaiSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
+    SpacesEventMonitoring
+{
     typealias SpaceType = YabaiSpace
     let executablePath = ConfigManager.shared.config.yabai.path
+    private var eventMonitor: YabaiSignalMonitor?
+
+    deinit {
+        stopMonitoring()
+    }
+
+    func startMonitoring(
+        onChange: @escaping (SpacesProviderChange) -> Void
+    ) {
+        if eventMonitor == nil {
+            eventMonitor = YabaiSignalMonitor(executablePath: executablePath)
+        }
+        eventMonitor?.startMonitoring { reason in
+            onChange(SpacesProviderChange(reason: reason))
+        }
+    }
+
+    func stopMonitoring() {
+        eventMonitor?.stopMonitoring()
+    }
 
     private func runYabaiCommand(arguments: [String]) -> Data? {
         let process = Process()

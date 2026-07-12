@@ -10,13 +10,52 @@ protocol WindowModel: Identifiable, Equatable, Codable {
     var id: Int { get }
     var title: String { get }
     var appName: String? { get }
+    var appBundleId: String? { get }
+    var appBundlePath: String? { get }
+    var appPid: Int? { get }
     var isFocused: Bool { get }
-    var appIcon: NSImage? { get set }
 }
 
 protocol SpacesProvider {
     associatedtype SpaceType: SpaceModel
     func getSpacesWithWindows() -> [SpaceType]?
+}
+
+enum SpacesChangeReason: String {
+    case initial
+    case fallbackPoll = "fallback-poll"
+    case appActivated = "app-activated"
+    case systemWake = "system-wake"
+    case providerEvent = "provider-event"
+    case focusSpace = "focus-space"
+    case focusSpaceWindow = "focus-space-window"
+    case focusWindow = "focus-window"
+    case providerLifecycle = "provider-lifecycle"
+}
+
+struct SpacesFocusChange {
+    let workspaceID: String
+    let windowID: Int?
+    let updatesWindowFocus: Bool
+}
+
+struct SpacesProviderChange {
+    let reason: SpacesChangeReason
+    let focusChange: SpacesFocusChange?
+
+    init(
+        reason: SpacesChangeReason,
+        focusChange: SpacesFocusChange? = nil
+    ) {
+        self.reason = reason
+        self.focusChange = focusChange
+    }
+}
+
+protocol SpacesEventMonitoring {
+    func startMonitoring(
+        onChange: @escaping (SpacesProviderChange) -> Void)
+    func stopMonitoring()
 }
 
 protocol SwitchableSpacesProvider: SpacesProvider {
@@ -36,7 +75,34 @@ struct AnyWindow: Identifiable, Equatable {
         self.title = window.title
         self.appName = window.appName
         self.isFocused = window.isFocused
-        self.appIcon = window.appIcon
+        self.appIcon = AppIconResolver.shared.icon(
+            bundleIdentifier: window.appBundleId,
+            bundlePath: window.appBundlePath,
+            processIdentifier: window.appPid,
+            appName: window.appName)
+    }
+
+    private init(
+        id: Int,
+        title: String,
+        appName: String?,
+        isFocused: Bool,
+        appIcon: NSImage?
+    ) {
+        self.id = id
+        self.title = title
+        self.appName = appName
+        self.isFocused = isFocused
+        self.appIcon = appIcon
+    }
+
+    func updatingFocus(_ isFocused: Bool) -> AnyWindow {
+        AnyWindow(
+            id: id,
+            title: title,
+            appName: appName,
+            isFocused: isFocused,
+            appIcon: appIcon)
     }
 
     static func == (lhs: AnyWindow, rhs: AnyWindow) -> Bool {
@@ -62,6 +128,43 @@ struct AnySpace: Identifiable, Equatable {
         self.windows = space.windows.map { AnyWindow($0) }
     }
 
+    private init(id: String, isFocused: Bool, windows: [AnyWindow]) {
+        self.id = id
+        self.isFocused = isFocused
+        self.windows = windows
+    }
+
+    func applying(_ focusChange: SpacesFocusChange) -> AnySpace {
+        let isTargetWorkspace = id == focusChange.workspaceID
+        let updatedWindows = windows.map { window in
+            if focusChange.updatesWindowFocus {
+                return window.updatingFocus(
+                    isTargetWorkspace && window.id == focusChange.windowID)
+            }
+            if !isTargetWorkspace {
+                return window.updatingFocus(false)
+            }
+            return window
+        }
+        return AnySpace(
+            id: id,
+            isFocused: isTargetWorkspace,
+            windows: updatedWindows)
+    }
+
+    func matches(_ focusChange: SpacesFocusChange) -> Bool {
+        guard isFocused == (id == focusChange.workspaceID) else {
+            return false
+        }
+        guard focusChange.updatesWindowFocus else { return true }
+
+        return windows.allSatisfy { window in
+            window.isFocused
+                == (id == focusChange.workspaceID
+                    && window.id == focusChange.windowID)
+        }
+    }
+
     static func == (lhs: AnySpace, rhs: AnySpace) -> Bool {
         return lhs.id == rhs.id && lhs.isFocused == rhs.isFocused
             && lhs.windows == rhs.windows
@@ -72,6 +175,10 @@ class AnySpacesProvider {
     private let _getSpacesWithWindows: () -> [AnySpace]?
     private let _focusSpace: ((String, Bool) -> Void)?
     private let _focusWindow: ((String) -> Void)?
+    private let _startMonitoring: (
+        @escaping (SpacesProviderChange) -> Void
+    ) -> Void
+    private let _stopMonitoring: () -> Void
 
     init<P: SpacesProvider>(_ provider: P) {
         _getSpacesWithWindows = {
@@ -89,6 +196,18 @@ class AnySpacesProvider {
             _focusSpace = nil
             _focusWindow = nil
         }
+
+        if let eventMonitor = provider as? any SpacesEventMonitoring {
+            _startMonitoring = { onChange in
+                eventMonitor.startMonitoring(onChange: onChange)
+            }
+            _stopMonitoring = {
+                eventMonitor.stopMonitoring()
+            }
+        } else {
+            _startMonitoring = { _ in }
+            _stopMonitoring = {}
+        }
     }
 
     func getSpacesWithWindows() -> [AnySpace]? {
@@ -101,5 +220,15 @@ class AnySpacesProvider {
 
     func focusWindow(windowId: String) {
         _focusWindow?(windowId)
+    }
+
+    func startMonitoring(
+        onChange: @escaping (SpacesProviderChange) -> Void
+    ) {
+        _startMonitoring(onChange)
+    }
+
+    func stopMonitoring() {
+        _stopMonitoring()
     }
 }

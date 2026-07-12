@@ -1,18 +1,41 @@
 import Foundation
 
-class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider {
+class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
+    SpacesEventMonitoring
+{
     typealias SpaceType = AeroSpace
     let executablePath = ConfigManager.shared.config.aerospace.path
+    private var eventMonitor: AerospaceEventMonitor?
+    private var supportsWorkspaceFocusMetadata: Bool?
+    private var supportsWindowAppIdentityMetadata: Bool?
+
+    deinit {
+        stopMonitoring()
+    }
+
+    func startMonitoring(
+        onChange: @escaping (SpacesProviderChange) -> Void
+    ) {
+        if eventMonitor == nil {
+            eventMonitor = AerospaceEventMonitor(
+                executablePath: executablePath)
+        }
+        eventMonitor?.startMonitoring(onChange: onChange)
+    }
+
+    func stopMonitoring() {
+        eventMonitor?.stopMonitoring()
+    }
 
     func getSpacesWithWindows() -> [AeroSpace]? {
-        guard var spaces = fetchSpaces(), let windows = fetchWindows() else {
+        guard
+            let spacesSnapshot = fetchSpaces(),
+            let windows = fetchWindows()
+        else {
             return nil
         }
-        if let focusedSpace = fetchFocusedSpace() {
-            for i in 0..<spaces.count {
-                spaces[i].isFocused = (spaces[i].id == focusedSpace.id)
-            }
-        }
+        let spaces = spacesSnapshot.spaces
+        let focusedSpaceId = spacesSnapshot.focusedSpaceId
         let focusedWindow = fetchFocusedWindow()
         var spaceDict = Dictionary(
             uniqueKeysWithValues: spaces.map { ($0.id, $0) })
@@ -26,10 +49,10 @@ class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider {
                     space.windows.append(mutableWindow)
                     spaceDict[ws] = space
                 }
-            } else if let focusedSpace = fetchFocusedSpace() {
-                if var space = spaceDict[focusedSpace.id] {
+            } else if let focusedSpaceId {
+                if var space = spaceDict[focusedSpaceId] {
                     space.windows.append(mutableWindow)
-                    spaceDict[focusedSpace.id] = space
+                    spaceDict[focusedSpaceId] = space
                 }
             }
         }
@@ -65,11 +88,43 @@ class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider {
         return data
     }
 
-    private func fetchSpaces() -> [AeroSpace]? {
-        guard
-            let data = runAerospaceCommand(arguments: [
+    private func fetchSpaces() -> (
+        spaces: [AeroSpace], focusedSpaceId: String?
+    )? {
+        var spaces: [AeroSpace]?
+        if supportsWorkspaceFocusMetadata != false {
+            spaces = fetchSpaces(arguments: [
+                "list-workspaces", "--all", "--json", "--format",
+                "%{workspace} %{workspace-is-focused}",
+            ])
+            if let spaces, spaces.allSatisfy({ $0.hasFocusMetadata }) {
+                supportsWorkspaceFocusMetadata = true
+                return (
+                    spaces,
+                    spaces.first(where: { $0.isFocused })?.id
+                )
+            }
+            supportsWorkspaceFocusMetadata = false
+        }
+
+        if spaces == nil {
+            spaces = fetchSpaces(arguments: [
                 "list-workspaces", "--all", "--json",
             ])
+        }
+        guard var spaces else {
+            return nil
+        }
+        let focusedSpaceId = fetchFocusedSpace()?.id
+        for i in 0..<spaces.count {
+            spaces[i].isFocused = (spaces[i].id == focusedSpaceId)
+        }
+        return (spaces, focusedSpaceId)
+    }
+
+    private func fetchSpaces(arguments: [String]) -> [AeroSpace]? {
+        guard
+            let data = runAerospaceCommand(arguments: arguments)
         else {
             return nil
         }
@@ -83,12 +138,28 @@ class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider {
     }
 
     private func fetchWindows() -> [AeroWindow]? {
-        guard
-            let data = runAerospaceCommand(arguments: [
+        if supportsWindowAppIdentityMetadata != false {
+            let windows = fetchWindows(arguments: [
                 "list-windows", "--all", "--json", "--format",
-                "%{window-id} %{app-name} %{window-title} %{workspace}",
+                "%{window-id} %{app-name} %{app-bundle-id} "
+                    + "%{app-bundle-path} %{app-pid} %{window-title} "
+                    + "%{workspace}",
             ])
-        else {
+            if let windows {
+                supportsWindowAppIdentityMetadata = true
+                return windows
+            }
+            supportsWindowAppIdentityMetadata = false
+        }
+
+        return fetchWindows(arguments: [
+            "list-windows", "--all", "--json", "--format",
+            "%{window-id} %{app-name} %{window-title} %{workspace}",
+        ])
+    }
+
+    private func fetchWindows(arguments: [String]) -> [AeroWindow]? {
+        guard let data = runAerospaceCommand(arguments: arguments) else {
             return nil
         }
         let decoder = JSONDecoder()
