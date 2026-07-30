@@ -7,12 +7,26 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C1BB4B442D526B5C00A1F46E /* CielBar.app in Frameworks */ = {isa = PBXBuildFile; fileRef = C10E2F8A2D41235900AC957C /* CielBar.app */; };
+		C1BB4B512D526B5C00A1F46E /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C1BB4B502D526B5C00A1F46E /* XCTest.framework */; };
 		F66C98C52D60E35600C3C53C /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = F66C98C42D60E35600C3C53C /* TOMLDecoder */; };
 		F6B514042D6C5F3400DFEB43 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = F6B514032D6C5F3400DFEB43 /* MarkdownUI */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		C1BB4B4C2D526B5C00A1F46E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C10E2F822D41235900AC957C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C10E2F892D41235900AC957C;
+			remoteInfo = CielBar;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		C10E2F8A2D41235900AC957C /* CielBar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CielBar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C1BB4B452D526B5C00A1F46E /* CielBarTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CielBarTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C1BB4B502D526B5C00A1F46E /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -34,6 +48,11 @@
 			path = CielBar;
 			sourceTree = "<group>";
 		};
+		C1BB4B462D526B5C00A1F46E /* CielBarTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CielBarTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -46,6 +65,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C1BB4B472D526B5C00A1F46E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1BB4B442D526B5C00A1F46E /* CielBar.app in Frameworks */,
+				C1BB4B512D526B5C00A1F46E /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -54,6 +82,7 @@
 			children = (
 				C10E2F8B2D41235900AC957C /* Products */,
 				C1BB4B332D526B5C00A1F46E /* CielBar */,
+				C1BB4B462D526B5C00A1F46E /* CielBarTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -61,6 +90,7 @@
 			isa = PBXGroup;
 			children = (
 				C10E2F8A2D41235900AC957C /* CielBar.app */,
+				C1BB4B452D526B5C00A1F46E /* CielBarTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -92,6 +122,29 @@
 			productReference = C10E2F8A2D41235900AC957C /* CielBar.app */;
 			productType = "com.apple.product-type.application";
 		};
+		C1BB4B4A2D526B5C00A1F46E /* CielBarTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C1BB4B4D2D526B5C00A1F46E /* Build configuration list for PBXNativeTarget "CielBarTests" */;
+			buildPhases = (
+				C1BB4B482D526B5C00A1F46E /* Sources */,
+				C1BB4B472D526B5C00A1F46E /* Frameworks */,
+				C1BB4B492D526B5C00A1F46E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C1BB4B4B2D526B5C00A1F46E /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				C1BB4B462D526B5C00A1F46E /* CielBarTests */,
+			);
+			name = CielBarTests;
+			packageProductDependencies = (
+			);
+			productName = CielBarTests;
+			productReference = C1BB4B452D526B5C00A1F46E /* CielBarTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -104,6 +157,10 @@
 				TargetAttributes = {
 					C10E2F892D41235900AC957C = {
 						CreatedOnToolsVersion = 16.2;
+					};
+					C1BB4B4A2D526B5C00A1F46E = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = C10E2F892D41235900AC957C;
 					};
 				};
 			};
@@ -144,12 +201,20 @@
 			projectRoot = "";
 			targets = (
 				C10E2F892D41235900AC957C /* CielBar */,
+				C1BB4B4A2D526B5C00A1F46E /* CielBarTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		C10E2F882D41235900AC957C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1BB4B492D526B5C00A1F46E /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -166,7 +231,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C1BB4B482D526B5C00A1F46E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C1BB4B4B2D526B5C00A1F46E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C10E2F892D41235900AC957C /* CielBar */;
+			targetProxy = C1BB4B4C2D526B5C00A1F46E /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		C10E2FAD2D41235B00AC957C /* Debug */ = {
@@ -357,6 +437,36 @@
 			};
 			name = Release;
 		};
+		C1BB4B4E2D526B5C00A1F46E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.6;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.zhl1ii.cielbar.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CielBar.app/Contents/MacOS/CielBar";
+			};
+			name = Debug;
+		};
+		C1BB4B4F2D526B5C00A1F46E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.6;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.zhl1ii.cielbar.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CielBar.app/Contents/MacOS/CielBar";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -374,6 +484,15 @@
 			buildConfigurations = (
 				C10E2FB02D41235B00AC957C /* Debug */,
 				C10E2FB12D41235B00AC957C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C1BB4B4D2D526B5C00A1F46E /* Build configuration list for PBXNativeTarget "CielBarTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C1BB4B4E2D526B5C00A1F46E /* Debug */,
+				C1BB4B4F2D526B5C00A1F46E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
