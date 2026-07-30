@@ -9,10 +9,23 @@ struct YabaiWindow: WindowModel {
     let appPid: Int?
     let isFocused: Bool
     let stackIndex: Int
+    let role: String?
+    let subrole: String?
+    let hasAXReference: Bool?
+    let isMinimized: Bool
     let isHidden: Bool
     let isFloating: Bool
     let isSticky: Bool
     let spaceId: Int
+
+    var isEligibleForDisplay: Bool {
+        guard role == "AXWindow" else { return false }
+        guard subrole == "AXStandardWindow" || subrole == "AXDialog" else {
+            return false
+        }
+        guard hasAXReference != false else { return false }
+        return !isMinimized && !isHidden && !isSticky
+    }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -22,6 +35,10 @@ struct YabaiWindow: WindowModel {
         case appPid = "pid"
         case isFocused = "has-focus"
         case stackIndex = "stack-index"
+        case role
+        case subrole
+        case hasAXReference = "has-ax-reference"
+        case isMinimized = "is-minimized"
         case isHidden = "is-hidden"
         case isFloating = "is-floating"
         case isSticky = "is-sticky"
@@ -33,12 +50,20 @@ struct YabaiWindow: WindowModel {
         spaceId = try container.decode(Int.self, forKey: .spaceId)
         title =
             try container.decodeIfPresent(String.self, forKey: .title)
-            ?? "Unnamed"
+                ?? "Unnamed"
         appName = try container.decodeIfPresent(String.self, forKey: .appName)
         appPid = try container.decodeIfPresent(Int.self, forKey: .appPid)
         isFocused = try container.decode(Bool.self, forKey: .isFocused)
         stackIndex =
             try container.decodeIfPresent(Int.self, forKey: .stackIndex) ?? 0
+        role = try container.decodeIfPresent(String.self, forKey: .role)
+        subrole = try container.decodeIfPresent(String.self, forKey: .subrole)
+        hasAXReference = try container.decodeIfPresent(
+            Bool.self, forKey: .hasAXReference
+        )
+        isMinimized = try container.decodeIfPresent(
+            Bool.self, forKey: .isMinimized
+        ) ?? false
         isHidden = try container.decode(Bool.self, forKey: .isHidden)
         isFloating = try container.decode(Bool.self, forKey: .isFloating)
         isSticky = try container.decode(Bool.self, forKey: .isSticky)

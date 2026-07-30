@@ -79,9 +79,14 @@ class YabaiSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
         guard let spaces = fetchSpaces(), let windows = fetchWindows() else {
             return nil
         }
-        let filteredWindows = windows.filter {
-            !($0.isHidden || $0.isFloating || $0.isSticky)
-        }
+
+        return Self.buildSpaces(spaces: spaces, windows: windows)
+    }
+
+    static func buildSpaces(
+        spaces: [YabaiSpace], windows: [YabaiWindow]
+    ) -> [YabaiSpace] {
+        let filteredWindows = windows.filter(\.isEligibleForDisplay)
         var spaceDict = Dictionary(
             uniqueKeysWithValues: spaces.map { ($0.id, $0) })
         for window in filteredWindows {
