@@ -125,8 +125,11 @@ class SpacesViewModel: ObservableObject {
         refreshScheduler.stop()
     }
 
-    func requestRefresh(reason: SpacesChangeReason) {
-        refreshScheduler.requestRefresh(reason: reason.rawValue)
+    func requestRefresh(
+        reason: SpacesChangeReason,
+        policy: SpacesRefreshPolicy = .debounced
+    ) {
+        refreshScheduler.requestRefresh(reason: reason, policy: policy)
     }
 
     private func loadSpacesSnapshot() -> SpacesRefreshSnapshot? {
@@ -279,7 +282,9 @@ class SpacesViewModel: ObservableObject {
             if let focusChange = providerChange.focusChange {
                 self.applyFocusChange(focusChange)
             }
-            self.requestRefresh(reason: providerChange.reason)
+            self.requestRefresh(
+                reason: providerChange.reason,
+                policy: providerChange.refreshPolicy)
         }
 
         requestRefresh(reason: reason)

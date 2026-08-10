@@ -17,9 +17,7 @@ class YabaiSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
         if eventMonitor == nil {
             eventMonitor = YabaiSignalMonitor(executablePath: executablePath)
         }
-        eventMonitor?.startMonitoring { reason in
-            onChange(SpacesProviderChange(reason: reason))
-        }
+        eventMonitor?.startMonitoring(onChange: onChange)
     }
 
     func stopMonitoring() {

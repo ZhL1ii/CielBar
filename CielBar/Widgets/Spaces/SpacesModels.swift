@@ -21,12 +21,18 @@ protocol SpacesProvider {
     func getSpacesWithWindows() -> [SpaceType]?
 }
 
+enum SpacesRefreshPolicy: Equatable {
+    case debounced
+    case immediate
+}
+
 enum SpacesChangeReason: String {
     case initial
     case fallbackPoll = "fallback-poll"
     case appActivated = "app-activated"
     case systemWake = "system-wake"
     case providerEvent = "provider-event"
+    case providerFocusEvent = "provider-focus-event"
     case focusSpace = "focus-space"
     case focusSpaceWindow = "focus-space-window"
     case focusWindow = "focus-window"
@@ -42,13 +48,16 @@ struct SpacesFocusChange {
 struct SpacesProviderChange {
     let reason: SpacesChangeReason
     let focusChange: SpacesFocusChange?
+    let refreshPolicy: SpacesRefreshPolicy
 
     init(
         reason: SpacesChangeReason,
-        focusChange: SpacesFocusChange? = nil
+        focusChange: SpacesFocusChange? = nil,
+        refreshPolicy: SpacesRefreshPolicy = .debounced
     ) {
         self.reason = reason
         self.focusChange = focusChange
+        self.refreshPolicy = refreshPolicy
     }
 }
 
