@@ -2,6 +2,65 @@ import AppKit
 import Combine
 import Foundation
 
+enum SpacesFocusCommand: Equatable {
+    case space(String)
+    case window(String)
+}
+
+final class SpacesFocusCoordinator {
+    typealias CommandHandler = (SpacesFocusCommand) -> Bool
+    typealias RefreshHandler = (SpacesChangeReason) -> Void
+    typealias DelayedWorkScheduler = (DispatchWorkItem) -> Void
+
+    private let commandHandler: CommandHandler
+    private let refreshHandler: RefreshHandler
+    private let coordinationQueue: DispatchQueue
+    private let scheduleDelayedWork: DelayedWorkScheduler
+    private var pendingWindowFocus: DispatchWorkItem?
+
+    init(
+        delay: TimeInterval = 0.1,
+        coordinationQueue: DispatchQueue = DispatchQueue(
+            label: "moe.ciel.CielBar.spaces-focus-coordinator",
+            qos: .userInitiated),
+        commandHandler: @escaping CommandHandler,
+        refreshHandler: @escaping RefreshHandler,
+        scheduleDelayedWork: DelayedWorkScheduler? = nil
+    ) {
+        self.commandHandler = commandHandler
+        self.refreshHandler = refreshHandler
+        self.coordinationQueue = coordinationQueue
+        self.scheduleDelayedWork = scheduleDelayedWork ?? { workItem in
+            coordinationQueue.asyncAfter(
+                deadline: .now() + delay,
+                execute: workItem)
+        }
+    }
+
+    func focusWindow(windowID: String, inSpaceWithID spaceID: String) {
+        coordinationQueue.async { [weak self] in
+            guard let self else { return }
+
+            self.pendingWindowFocus?.cancel()
+            self.pendingWindowFocus = nil
+
+            if self.commandHandler(.space(spaceID)) {
+                self.refreshHandler(.focusSpace)
+            }
+
+            let windowFocus = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.pendingWindowFocus = nil
+                if self.commandHandler(.window(windowID)) {
+                    self.refreshHandler(.focusWindow)
+                }
+            }
+            self.pendingWindowFocus = windowFocus
+            self.scheduleDelayedWork(windowFocus)
+        }
+    }
+}
+
 class SpacesViewModel: ObservableObject {
     private enum ProviderKind {
         case yabai
@@ -31,6 +90,13 @@ class SpacesViewModel: ObservableObject {
     private var appLaunchObserver: NSObjectProtocol?
     private var appTerminationObserver: NSObjectProtocol?
     private var pendingFocusChange: SpacesFocusChange?
+    private lazy var focusCoordinator = SpacesFocusCoordinator(
+        commandHandler: { [weak self] command in
+            self?.executeFocusCommand(command) ?? false
+        },
+        refreshHandler: { [weak self] reason in
+            self?.requestRefresh(reason: reason)
+        })
     private lazy var refreshScheduler = SpacesRefreshScheduler(
         snapshotLoader: { [weak self] in
             self?.loadSpacesSnapshot()
@@ -213,6 +279,25 @@ class SpacesViewModel: ObservableObject {
             provider?.focusWindow(windowId: String(window.id))
             self.requestRefresh(reason: .focusWindow)
         }
+    }
+
+    func focusWindow(_ window: AnyWindow, in space: AnySpace) {
+        focusCoordinator.focusWindow(
+            windowID: String(window.id), inSpaceWithID: space.id)
+    }
+
+    private func executeFocusCommand(_ command: SpacesFocusCommand) -> Bool {
+        guard let provider = currentProviderState().provider else {
+            return false
+        }
+
+        switch command {
+        case .space(let spaceID):
+            provider.focusSpace(spaceId: spaceID, needWindowFocus: false)
+        case .window(let windowID):
+            provider.focusWindow(windowId: windowID)
+        }
+        return true
     }
 
     private func handleApplicationLifecycleNotification(
