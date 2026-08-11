@@ -22,6 +22,7 @@ final class SpacesRefreshScheduler {
     private var refreshRequestID = 0
     private var isRunning = false
     private var needsFollowUpRefresh = false
+    private var followUpRefreshPolicy: SpacesRefreshPolicy = .debounced
     private var isStopped = false
     private var lastPublishedSpaces: [AnySpace] = []
 
@@ -35,10 +36,13 @@ final class SpacesRefreshScheduler {
         self.publishHandler = publishHandler
     }
 
-    func requestRefresh(reason: String) {
+    func requestRefresh(
+        reason: SpacesChangeReason,
+        policy: SpacesRefreshPolicy = .debounced
+    ) {
         stateQueue.async { [weak self] in
             guard let self, !self.isStopped else { return }
-            self.scheduleRefreshLocked(reason: reason)
+            self.scheduleRefreshLocked(reason: reason, policy: policy)
         }
     }
 
@@ -50,18 +54,28 @@ final class SpacesRefreshScheduler {
             self.scheduledRefresh = nil
             self.refreshRequestID += 1
             self.needsFollowUpRefresh = false
+            self.followUpRefreshPolicy = .debounced
         }
     }
 
-    private func scheduleRefreshLocked(reason: String) {
+    private func scheduleRefreshLocked(
+        reason: SpacesChangeReason,
+        policy: SpacesRefreshPolicy
+    ) {
         if isRunning {
-            needsFollowUpRefresh = true
+            recordFollowUpRefreshLocked(policy: policy)
             return
         }
 
         scheduledRefresh?.cancel()
         refreshRequestID += 1
         let requestID = refreshRequestID
+
+        if policy == .immediate {
+            startRefreshLocked(requestID: requestID, reason: reason)
+            return
+        }
+
         let workItem = DispatchWorkItem { [weak self] in
             self?.startRefreshLocked(requestID: requestID, reason: reason)
         }
@@ -71,12 +85,15 @@ final class SpacesRefreshScheduler {
             execute: workItem)
     }
 
-    private func startRefreshLocked(requestID: Int, reason: String) {
+    private func startRefreshLocked(
+        requestID: Int,
+        reason: SpacesChangeReason
+    ) {
         guard !isStopped, requestID == refreshRequestID else { return }
         scheduledRefresh = nil
 
         if isRunning {
-            needsFollowUpRefresh = true
+            recordFollowUpRefreshLocked(policy: .debounced)
             return
         }
 
@@ -89,7 +106,8 @@ final class SpacesRefreshScheduler {
     }
 
     private func finishRefresh(
-        snapshot: SpacesRefreshSnapshot?, reason: String
+        snapshot: SpacesRefreshSnapshot?,
+        reason: SpacesChangeReason
     ) {
         stateQueue.async { [weak self] in
             guard let self else { return }
@@ -115,15 +133,24 @@ final class SpacesRefreshScheduler {
         }
     }
 
-    private func completeRefreshLocked(reason: String) {
+    private func completeRefreshLocked(reason: SpacesChangeReason) {
         isRunning = false
         guard !isStopped else { return }
 
         let shouldRunFollowUp = needsFollowUpRefresh
+        let followUpPolicy = followUpRefreshPolicy
         needsFollowUpRefresh = false
+        followUpRefreshPolicy = .debounced
 
         if shouldRunFollowUp {
-            scheduleRefreshLocked(reason: reason)
+            scheduleRefreshLocked(reason: reason, policy: followUpPolicy)
+        }
+    }
+
+    private func recordFollowUpRefreshLocked(policy: SpacesRefreshPolicy) {
+        needsFollowUpRefresh = true
+        if policy == .immediate {
+            followUpRefreshPolicy = .immediate
         }
     }
 }

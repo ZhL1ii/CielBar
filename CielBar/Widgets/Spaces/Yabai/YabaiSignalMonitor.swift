@@ -2,19 +2,21 @@ import Darwin
 import Foundation
 
 final class YabaiSignalMonitor {
-    typealias ChangeHandler = (SpacesChangeReason) -> Void
+    typealias ChangeHandler = (SpacesProviderChange) -> Void
 
     private struct RegisteredSignal: Decodable {
         let label: String?
     }
 
-    private static let monitoredEvents = [
+    static let focusEvents = [
         "space_changed",
+        "window_focused",
+    ]
+    static let otherMonitoredEvents = [
         "space_created",
         "space_destroyed",
         "window_created",
         "window_destroyed",
-        "window_focused",
         "window_title_changed",
         "window_minimized",
         "window_deminimized",
@@ -23,6 +25,7 @@ final class YabaiSignalMonitor {
         "display_removed",
         "system_woke",
     ]
+    private static let monitoredEvents = focusEvents + otherMonitoredEvents
     private static let labelPrefix = "CielBar.spaces-event."
 
     private let executablePath: String
@@ -31,7 +34,8 @@ final class YabaiSignalMonitor {
         label: "moe.ciel.CielBar.yabai-signal-monitor")
     private let stateQueueKey = DispatchSpecificKey<Void>()
 
-    private var signalSource: DispatchSourceSignal?
+    private var genericSignalSource: DispatchSourceSignal?
+    private var focusSignalSource: DispatchSourceSignal?
     private var registeredLabels = Set<String>()
     private var onChange: ChangeHandler?
     private var isMonitoring = false
@@ -65,17 +69,44 @@ final class YabaiSignalMonitor {
     }
 
     private func installSignalSourceLocked() {
-        guard signalSource == nil else { return }
+        if genericSignalSource == nil {
+            genericSignalSource = makeSignalSourceLocked(signal: SIGUSR1)
+        }
+        if focusSignalSource == nil {
+            focusSignalSource = makeSignalSourceLocked(signal: SIGUSR2)
+        }
+    }
 
-        _ = Darwin.signal(SIGUSR1, SIG_IGN)
+    private func makeSignalSourceLocked(
+        signal: Int32
+    ) -> DispatchSourceSignal {
+        _ = Darwin.signal(signal, SIG_IGN)
         let source = DispatchSource.makeSignalSource(
-            signal: SIGUSR1, queue: stateQueue)
+            signal: signal, queue: stateQueue)
         source.setEventHandler { [weak self] in
             guard let self, self.isMonitoring else { return }
-            self.onChange?(.providerEvent)
+            self.onChange?(Self.providerChange(for: signal))
         }
-        signalSource = source
         source.resume()
+        return source
+    }
+
+    static func providerChange(for signal: Int32) -> SpacesProviderChange {
+        switch signal {
+        case SIGUSR1:
+            return SpacesProviderChange(reason: .providerEvent)
+        case SIGUSR2:
+            return SpacesProviderChange(
+                reason: .providerFocusEvent,
+                refreshPolicy: .immediate)
+        default:
+            preconditionFailure("Unexpected yabai signal: \(signal)")
+        }
+    }
+
+    static func action(for event: String, processIdentifier: Int32) -> String {
+        let signalName = focusEvents.contains(event) ? "USR2" : "USR1"
+        return "/bin/kill -\(signalName) \(processIdentifier)"
     }
 
     private func removeStaleSignalsLocked() {
@@ -106,11 +137,11 @@ final class YabaiSignalMonitor {
     }
 
     private func registerSignalsLocked() {
-        let action = "/bin/kill -USR1 \(processIdentifier)"
-
         for event in Self.monitoredEvents {
             let label = Self.labelPrefix
                 + "\(processIdentifier).\(event)"
+            let action = Self.action(
+                for: event, processIdentifier: processIdentifier)
             let wasAdded = runYabaiCommand(arguments: [
                 "-m", "signal", "--add",
                 "event=\(event)",
@@ -129,7 +160,7 @@ final class YabaiSignalMonitor {
     }
 
     private func stopMonitoringLocked() {
-        guard isMonitoring || signalSource != nil
+        guard isMonitoring || genericSignalSource != nil || focusSignalSource != nil
             || !registeredLabels.isEmpty
         else {
             onChange = nil
@@ -138,8 +169,10 @@ final class YabaiSignalMonitor {
 
         isMonitoring = false
         onChange = nil
-        signalSource?.cancel()
-        signalSource = nil
+        genericSignalSource?.cancel()
+        genericSignalSource = nil
+        focusSignalSource?.cancel()
+        focusSignalSource = nil
 
         for label in registeredLabels {
             _ = removeSignalLocked(label: label)
