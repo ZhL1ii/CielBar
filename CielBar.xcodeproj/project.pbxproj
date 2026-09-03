@@ -77,12 +77,21 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		C0C4C4E43049BD630003AE87 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				C1BB4B502D526B5C00A1F46E /* XCTest.framework */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		C10E2F812D41235900AC957C = {
 			isa = PBXGroup;
 			children = (
 				C10E2F8B2D41235900AC957C /* Products */,
 				C1BB4B332D526B5C00A1F46E /* CielBar */,
 				C1BB4B462D526B5C00A1F46E /* CielBarTests */,
+				C0C4C4E43049BD630003AE87 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -395,7 +404,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 0.5.1;
+				MARKETING_VERSION = 0.5.4;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.zhl1ii.cielbar;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -429,7 +438,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 0.5.1;
+				MARKETING_VERSION = 0.5.4;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.zhl1ii.cielbar;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -445,7 +454,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				PRODUCT_BUNDLE_IDENTIFIER = "io.github.zhl1ii.cielbar.tests";
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.zhl1ii.cielbar.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CielBar.app/Contents/MacOS/CielBar";
@@ -460,7 +469,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				PRODUCT_BUNDLE_IDENTIFIER = "io.github.zhl1ii.cielbar.tests";
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.zhl1ii.cielbar.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CielBar.app/Contents/MacOS/CielBar";
