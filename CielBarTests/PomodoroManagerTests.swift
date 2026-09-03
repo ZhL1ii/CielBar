@@ -223,6 +223,39 @@ final class PomodoroManagerTests: XCTestCase {
             clock.current.addingTimeInterval(60))
     }
 
+    func testConfigurationReloadPreservesLiveStateAndAppliesToFuturePhases() {
+        let (manager, clock) = makeManager(workMinutes: 1, breakMinutes: 2)
+        manager.play()
+        clock.advance(by: 10)
+        manager.tick()
+
+        let phaseBeforeReload = manager.phase
+        let remainingBeforeReload = manager.remainingSeconds
+        let deadlineBeforeReload = manager.deadline
+        let runningBeforeReload = manager.isRunning
+
+        manager.updateConfiguration(
+            PomodoroConfiguration(workDurationMinutes: 3, breakDurationMinutes: 4)
+        )
+
+        XCTAssertEqual(manager.configuration.workDurationMinutes, 3)
+        XCTAssertEqual(manager.configuration.breakDurationMinutes, 4)
+        XCTAssertEqual(manager.phase, phaseBeforeReload)
+        XCTAssertEqual(manager.remainingSeconds, remainingBeforeReload)
+        XCTAssertEqual(manager.deadline, deadlineBeforeReload)
+        XCTAssertEqual(manager.isRunning, runningBeforeReload)
+
+        manager.reset()
+        XCTAssertEqual(manager.phase, .work)
+        XCTAssertEqual(manager.remainingSeconds, 180)
+        XCTAssertFalse(manager.isRunning)
+
+        manager.nextPhase()
+        XCTAssertEqual(manager.phase, .break)
+        XCTAssertEqual(manager.remainingSeconds, 240)
+        XCTAssertFalse(manager.isRunning)
+    }
+
     func testWakeBeforeDeadlineCountsSleepAndContinuesRunning() {
         let (manager, clock) = makeManager(workMinutes: 1, breakMinutes: 2)
         let start = clock.current

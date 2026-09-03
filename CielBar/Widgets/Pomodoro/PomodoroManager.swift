@@ -133,6 +133,12 @@ final class PomodoroManager: ObservableObject {
             notificationCenter: notificationCenter)
     }
 
+    func updateConfiguration(_ configuration: PomodoroConfiguration) {
+        // A reload changes only durations used by later resets or phase
+        // changes. Keep the live countdown unchanged.
+        self.configuration = configuration
+    }
+
     deinit {
         // A deinitializer is not main-actor isolated, so release these
         // resources directly here.
