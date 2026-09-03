@@ -1,16 +1,12 @@
 # CielBar
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 <p align="center" dir="auto">
   <img src="resources/header-image.png" alt="CielBar">
   <p align="center" dir="auto">
     <a href="LICENSE">
       <img alt="License Badge" src="https://img.shields.io/badge/license-MIT-green.svg" style="max-width: 100%;">
-    </a>
-    <a href="CHANGELOG.md">
-      <img alt="Changelog Badge" src="https://img.shields.io/badge/view-changelog-green.svg" style="max-width: 100%;">
-    </a>
-    <a href="https://github.com/ZhL1ii/cielbar/releases">
-      <img alt="Releases Badge" src="https://img.shields.io/badge/download-releases-green.svg" style="max-width: 100%;">
     </a>
     <a href="https://github.com/ZhL1ii/cielbar/issues">
       <img alt="Issues Badge" src="https://img.shields.io/badge/issues-welcome-green.svg" style="max-width: 100%;">
@@ -18,155 +14,66 @@
   </p>
 </p>
 
-**CielBar** is a lightweight macOS menu bar replacement for users who run tiling window managers such as [yabai](https://github.com/koekeishiya/yabai) or [AeroSpace](https://github.com/nikitabobko/AeroSpace). It displays spaces, windows, media, network, battery, and time information in a compact macOS-style panel.
+**CielBar** is a lightweight macOS menu bar replacement for users of tiling window managers such as [yabai](https://github.com/koekeishiya/yabai) and [AeroSpace](https://github.com/nikitabobko/AeroSpace). It started as a fork of [barik](https://github.com/mocki-toki/barik) and continues to build on it.
 
-CielBar is an independent fork of [barik](https://github.com/mocki-toki/barik). The original project and MIT copyright notice are preserved in [LICENSE](LICENSE).
+It puts spaces, windows, media, network, battery, calendar, Pomodoro, and time information in one compact, configurable panel.
 
-<br>
+The main differences from barik are:
 
-<div align="center">
-  <h3>Screenshots</h3>
-  <img src="resources/preview-image-light.png" alt="CielBar Light Theme">
-  <img src="resources/preview-image-dark.png" alt="CielBar Dark Theme">
-</div>
-<br>
-<div align="center">
-  <h3>Video</h3>
-  <video src="https://github.com/user-attachments/assets/33cfd2c2-e961-4d04-8012-664db0113d4f">
-</div>
+- Spaces updates now use yabai signals and AeroSpace `subscribe` notifications instead of frequent polling. This reduces battery drain and resource use while keeping a fallback refresh path for missed events.
+- CielBar adds a Pomodoro timer widget.
 
-https://github.com/user-attachments/assets/d3799e24-c077-4c6a-a7da-a1f2eee1a07f
+## Screenshots
 
-<br>
+- [Light theme screenshot](resources/cielbar-light.png)
+
+## Features
+
+- Spaces and open windows through yabai or AeroSpace
+- Click a space to switch to it or a window to focus it
+- Now Playing controls for Spotify and Apple Music
+- Widgets for network status, battery, time, and calendar events
+- An optional Pomodoro timer
+- Customize widget order, themes, popups, spacing, and appearance
+- Automatic configuration reloads and update notifications
 
 ## Requirements
 
-- macOS 14.6+
+- macOS 14.6 or later
+- yabai or AeroSpace, if you want the Spaces and windows widget
 
-## Quick Start
+## Installation
 
-1. Download the latest build from this repository's Releases page, unzip it, and move `CielBar.app` to your Applications folder.
-2. Optional: to display open applications and spaces, install [yabai](https://github.com/koekeishiya/yabai) or [AeroSpace](https://github.com/nikitabobko/AeroSpace) and set up hotkeys. For yabai, you also need skhd or Raycast scripts. Configure top padding as shown in [example/.yabairc](example/.yabairc).
-3. Hide the system menu bar in System Settings and uncheck Desktop & Dock -> Show items -> On Desktop.
-4. Launch CielBar from the Applications folder.
-5. Add CielBar to your login items for automatic startup.
+1. Download the latest build from [Releases](https://github.com/ZhL1ii/cielbar/releases).
+2. Unzip it and move `CielBar.app` to your Applications folder.
+3. If you use the Spaces widget, install and configure [yabai](https://github.com/koekeishiya/yabai) or [AeroSpace](https://github.com/nikitabobko/AeroSpace). The example [`.yabairc`](example/.yabairc) includes the top-padding setup for CielBar.
+4. In System Settings, hide the macOS system menu bar, then launch CielBar.
+5. Add CielBar to your login items if you want it to start automatically.
 
 ## Configuration
 
-On first launch, CielBar creates:
+On first launch, CielBar creates this file:
 
 ```text
 ~/.cielbar-config.toml
 ```
 
-It also supports the XDG-style path:
+The XDG-style path `~/.config/cielbar/config.toml` is also supported. If CielBar finds a legacy barik configuration before creating its own, it imports that file once into the primary CielBar path.
 
-```text
-~/.config/cielbar/config.toml
-```
+The [default configuration](example/config.toml) contains the complete default TOML file. CielBar reloads changes while it is running.
 
-If an older barik config exists and no CielBar config has been created yet, CielBar imports it once into `~/.cielbar-config.toml`. New writes use the CielBar path.
+To use the Pomodoro widget, add `"default.pomodoro"` to `widgets.displayed`.
 
-```toml
-# If you installed yabai or aerospace without using Homebrew,
-# manually set the path to the binary. For example:
-#
-# yabai.path = "/run/current-system/sw/bin/yabai"
-# aerospace.path = ...
+## Notes
 
-theme = "system" # system, light, dark
-
-[widgets]
-displayed = [ # widgets on menu bar
-    "default.spaces",
-    "spacer",
-    "default.nowplaying",
-    "default.network",
-    "default.battery",
-    "divider",
-    # { "default.time" = { time-zone = "America/Los_Angeles", format = "E d, hh:mm" } },
-    "default.time",
-]
-
-[widgets.default.spaces]
-space.show-key = true
-window.show-title = true
-window.title.max-length = 50
-
-# A list of applications that will always be displayed by application name.
-# Other applications will show the window title if there is more than one window.
-window.title.always-display-app-name-for = ["Mail", "Chrome", "Arc"]
-
-[widgets.default.nowplaying.popup]
-view-variant = "horizontal"
-
-[widgets.default.battery]
-show-percentage = true
-warning-level = 30
-critical-level = 10
-
-[widgets.default.time]
-format = "E d, J:mm"
-calendar.format = "J:mm"
-
-calendar.show-events = true
-# calendar.allow-list = ["Home", "Personal"]
-# calendar.deny-list = ["Work", "Boss"]
-
-[widgets.default.time.popup]
-view-variant = "box"
-
-### EXPERIMENTAL, WILL BE REPLACED BY STYLE API IN THE FUTURE
-[experimental.background]
-displayed = false
-height = "menu-bar"
-blur = 3
-
-[experimental.foreground]
-height = "menu-bar"
-horizontal-padding = 25
-spacing = 15
-
-[experimental.foreground.widgets-background]
-displayed = false
-blur = 3
-```
-
-## Roadmap
-
-CielBar will focus on project identity cleanup, release stability, configuration ergonomics, and better day-to-day window-manager integration. Longer term, widgets should be flexible enough to live beyond the top menu bar, including bottom, left, and right screen edges.
-
-## Now Playing Support
-
-The Now Playing widget currently supports:
-
-1. Spotify, through the desktop application.
-2. Apple Music, through the desktop application.
-
-Create an issue if you want another music service considered.
-
-## Where Are the Menu Items?
-
-Menu items such as File, Edit, and View are not currently supported. This limitation was originally tracked upstream in [#5](https://github.com/mocki-toki/barik/issues/5) and [#1](https://github.com/mocki-toki/barik/issues/1).
-
-You can use [Raycast](https://www.raycast.com/) as a workaround because it supports menu items through an interface similar to Spotlight. If you need the system menu bar, move your mouse to the top of the screen to reveal it.
-
-<img src="resources/raycast-menu-items.jpeg" alt="Raycast Menu Items">
+CielBar replaces the visual menu bar, but it does not currently provide application menu items such as File, Edit, or View. If you need those menus, keep the macOS system menu bar available.
 
 ## Contributing
 
-Contributions are welcome. Please open issues and pull requests against the CielBar repository.
+Issues and pull requests are welcome. Use the [issue tracker](https://github.com/ZhL1ii/cielbar/issues) for questions, bug reports, and feature requests.
 
 ## License
 
-[MIT](LICENSE)
+CielBar is available under the [MIT License](LICENSE). It is an independent fork of [barik](https://github.com/mocki-toki/barik), and the original MIT copyright notice remains in the license file.
 
-This project is based on [barik](https://github.com/mocki-toki/barik). See [LICENSE](LICENSE) for the original MIT license notice and the CielBar copyright notice.
-
-## Trademarks
-
-Apple and macOS are trademarks of Apple Inc. This project is not connected to Apple Inc. and does not have their approval or support.
-
-## Upstream
-
-Original project: [mocki-toki/barik](https://github.com/mocki-toki/barik)
+Apple and macOS are trademarks of Apple Inc. CielBar is not affiliated with or endorsed by Apple Inc.

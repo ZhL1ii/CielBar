@@ -1,0 +1,61 @@
+# If you installed yabai or aerospace without using Homebrew,
+# manually set the path to the binary. For example:
+#
+# yabai.path = "/run/current-system/sw/bin/yabai"
+# aerospace.path = ...
+
+theme = "system" # system, light, dark
+
+[widgets]
+displayed = [ # widgets on menu bar
+    "default.spaces",
+    "spacer",
+    "default.network",
+    "default.battery",
+    "divider",
+    # { "default.time" = { time-zone = "America/Los_Angeles", format = "E d, hh:mm" } },
+    "default.time"
+]
+
+[widgets.default.spaces]
+space.show-key = true        # show space number (or character, if you use AeroSpace)
+window.show-title = true
+window.title.max-length = 50
+
+[widgets.default.battery]
+show-percentage = true
+warning-level = 30
+critical-level = 10
+
+[widgets.default.time]
+format = "E d, J:mm"
+calendar.format = "J:mm"
+
+calendar.show-events = true
+# calendar.allow-list = ["Home", "Personal"] # show only these calendars
+# calendar.deny-list = ["Work", "Boss"] # show all calendars except these
+
+[widgets.default.time.popup]
+view-variant = "box"
+
+[widgets.default.pomodoro]
+# Durations are whole minutes from 1 through 1440.
+# Missing or invalid work and break values use 45 and 10 minutes,
+# respectively.
+work-duration = 45
+break-duration = 10
+
+### EXPERIMENTAL, WILL BE REPLACED BY STYLE API IN THE FUTURE
+[experimental.background]
+displayed = false
+height = "menu-bar"
+blur = 3
+
+[experimental.foreground]
+height = "menu-bar"
+horizontal-padding = 25
+spacing = 15
+
+[experimental.foreground.widgets-background]
+displayed = false
+blur = 3
