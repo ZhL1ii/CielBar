@@ -3,7 +3,6 @@
 [English](README.md) | [简体中文](README.zh-CN.md)
 
 <p align="center" dir="auto">
-  <img src="resources/header-image.png" alt="CielBar">
   <p align="center" dir="auto">
     <a href="LICENSE">
       <img alt="License Badge" src="https://img.shields.io/badge/license-MIT-green.svg" style="max-width: 100%;">
@@ -25,7 +24,7 @@ The main differences from barik are:
 
 ## Screenshots
 
-- [Light theme screenshot](resources/cielbar-light.png)
+![Light theme screenshot](resources/cielbar-light.png)
 
 ## Features
 

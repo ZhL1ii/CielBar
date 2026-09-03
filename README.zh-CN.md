@@ -3,7 +3,6 @@
 [English](README.md) | 简体中文
 
 <p align="center" dir="auto">
-  <img src="resources/header-image.png" alt="CielBar">
   <p align="center" dir="auto">
     <a href="LICENSE">
       <img alt="License Badge" src="https://img.shields.io/badge/license-MIT-green.svg" style="max-width: 100%;">
@@ -25,7 +24,7 @@ CielBar 将 Spaces、窗口、媒体播放、网络、电池、日历、番茄�
 
 ## 截图
 
-- [浅色主题截图](resources/cielbar-light.png)
+![浅色主题截图](resources/cielbar-light.png)
 
 ## 功能
 
