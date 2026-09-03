@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// The widget owns its manager, so a configuration reload does not reset an
-/// active countdown.
+/// The widget owns the manager shared with its popup, so a configuration
+/// reload does not reset an active countdown.
 struct PomodoroWidget: View {
     @EnvironmentObject private var configProvider: ConfigProvider
     @StateObject var manager: PomodoroManager
+    @State private var rect: CGRect = .zero
 
     init(configuration: PomodoroConfiguration = .defaultValue) {
         _manager = StateObject(
@@ -21,6 +22,25 @@ struct PomodoroWidget: View {
         .experimentalConfiguration(cornerRadius: 15)
         .frame(maxHeight: .infinity)
         .background(.black.opacity(0.001))
+        .background(
+            GeometryReader { geometry in
+                Color.clear
+                    .onAppear {
+                        rect = geometry.frame(in: .global)
+                    }
+                    .onChange(of: geometry.frame(in: .global)) { _, newFrame in
+                        rect = newFrame
+                    }
+            }
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // Passing the widget's manager keeps the popup and bar on the same
+            // countdown.
+            MenuBarPopup.show(rect: rect, id: "pomodoro") {
+                PomodoroPopup(manager: manager)
+            }
+        }
         .onAppear {
             updateConfiguration(from: configProvider.config)
         }
@@ -36,7 +56,7 @@ struct PomodoroWidget: View {
     }
 }
 
-/// The bar and popup use this view for the same work and break styling.
+/// The bar and popup share this view for their time and break-phase styling.
 struct PomodoroTimeView: View {
     let phase: PomodoroPhase
     let formattedTime: String
@@ -44,7 +64,7 @@ struct PomodoroTimeView: View {
     var body: some View {
         Text(formattedTime)
             .monospacedDigit()
-            // Both phases use the same padding, so the countdown stays in place
+            // Use the same padding in both phases so the countdown does not move
             // when the break border appears or disappears.
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
