@@ -65,15 +65,15 @@ struct PomodoroTimeView: View {
         Text(formattedTime)
             .monospacedDigit()
             // Use the same padding in both phases so the countdown does not move
-            // when the break border appears or disappears.
+            // when the border style changes.
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
             .overlay {
-                if phase == .break {
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(
-                            style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
-                }
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(
+                        style: StrokeStyle(
+                            lineWidth: 1,
+                            dash: phase == .break ? [3, 2] : []))
             }
     }
 }
