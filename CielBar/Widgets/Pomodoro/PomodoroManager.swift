@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -5,7 +6,7 @@ enum PomodoroPhase: Equatable {
     case work
     case `break`
 
-    /// Work and break alternate, so every transition selects the other phase.
+    /// Work and break alternate, so this property returns the other phase.
     var next: PomodoroPhase {
         switch self {
         case .work:
@@ -44,9 +45,9 @@ struct PomodoroConfiguration: Equatable {
     }
 
     init(config: ConfigData) {
-        // `intValue` returns nil for a missing key or a TOML value of another
-        // type. Validate each field independently so one bad value does not
-        // discard a valid value from the other phase.
+        // `intValue` is nil when a key is missing or has another TOML type.
+        // Validate the fields separately so one invalid phase does not affect
+        // the other.
         self.init(
             workDurationMinutes: config["work-duration"]?.intValue,
             breakDurationMinutes: config["break-duration"]?.intValue
@@ -74,8 +75,8 @@ struct PomodoroConfiguration: Equatable {
         _ value: Int?,
         fallback: Int
     ) -> Int {
-        // Zero would make the phase end immediately. Keep only values in the
-        // documented range and use the field's fallback for everything else.
+        // A zero-length phase would end immediately. Use the field's default
+        // for values outside the allowed range.
         guard let value, validDurationRange.contains(value) else {
             return fallback
         }
@@ -85,8 +86,8 @@ struct PomodoroConfiguration: Equatable {
 
 @MainActor
 final class PomodoroManager: ObservableObject {
-    // This is UI state. Main-actor isolation keeps published changes on the
-    // main actor when the timer or controls update the manager.
+    // Published state is main-actor isolated. Timer and control callbacks
+    // update it on that actor before SwiftUI observes the changes.
     @Published private(set) var phase: PomodoroPhase
     @Published private(set) var remainingSeconds: Int
     @Published private(set) var isRunning: Bool
@@ -94,27 +95,54 @@ final class PomodoroManager: ObservableObject {
     private(set) var configuration: PomodoroConfiguration
     private(set) var deadline: Date?
 
-    // Tests inject a clock here so they can advance time without waiting.
+    private let notificationCenter: NotificationCenter
+    // Tests supply a mutable clock so they can advance time without waiting.
     private let now: () -> Date
+    private var timer: Timer?
+    private var sleepObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
+    private var isSleeping = false
+    private var wasRunningBeforeSleep = false
 
     init(
         configuration: PomodoroConfiguration = .defaultValue,
-        now: @escaping () -> Date = { Date() }
+        now: @escaping () -> Date = { Date() },
+        notificationCenter: NotificationCenter = NSWorkspace.shared
+            .notificationCenter
     ) {
         self.configuration = configuration
         self.now = now
-        // A new manager starts a fresh work phase in the paused state.
+        self.notificationCenter = notificationCenter
+        // Start each manager with a paused work phase.
         phase = .work
         remainingSeconds = configuration.workDurationSeconds
         isRunning = false
         deadline = nil
+        startMonitoring()
     }
 
     convenience init(
         config: ConfigData,
-        now: @escaping () -> Date = { Date() }
+        now: @escaping () -> Date = { Date() },
+        notificationCenter: NotificationCenter = NSWorkspace.shared
+            .notificationCenter
     ) {
-        self.init(configuration: PomodoroConfiguration(config: config), now: now)
+        self.init(
+            configuration: PomodoroConfiguration(config: config),
+            now: now,
+            notificationCenter: notificationCenter)
+    }
+
+    deinit {
+        // A deinitializer is not main-actor isolated, so release these
+        // resources directly here.
+        timer?.invalidate()
+        if let sleepObserver {
+            notificationCenter.removeObserver(sleepObserver)
+        }
+        if let wakeObserver {
+            notificationCenter.removeObserver(wakeObserver)
+        }
     }
 
     var formattedRemainingTime: String {
@@ -122,8 +150,8 @@ final class PomodoroManager: ObservableObject {
     }
 
     static func formattedTime(for seconds: Int) -> String {
-        // Clamp negative input. Hours have a minimum width of two digits, but
-        // are not capped at 99, so 1440 minutes displays as 24:00:00.
+        // Clamp negatives to zero. Hours use at least two digits but can exceed
+        // 99, which lets the maximum duration display as 24:00:00.
         let totalSeconds = max(0, seconds)
         let hours = totalSeconds / 3600
         let minutes = (totalSeconds % 3600) / 60
@@ -143,19 +171,20 @@ final class PomodoroManager: ObservableObject {
     }
 
     func play(at date: Date) {
-        guard !isRunning else { return }
+        guard !isRunning, !isSleeping else { return }
 
         if remainingSeconds <= 0 {
-            // Normal expiry switches phase before zero can be published. Keep
-            // this guard for any other path that reaches a zero remainder.
+            // Expiry normally moves to the next phase before zero is visible.
+            // This also repairs a zero remainder if another path produces one.
             remainingSeconds = configuration.durationSeconds(for: phase)
         }
 
-        // Store an absolute deadline instead of decrementing a counter on each
-        // callback. Delayed callbacks cannot accumulate drift, and resuming
-        // continues from the saved remainder.
+        // Keep an absolute deadline instead of decrementing the remainder on
+        // each callback. Delayed callbacks then do not accumulate drift, and
+        // resume starts from the saved remainder.
         deadline = date.addingTimeInterval(TimeInterval(remainingSeconds))
         isRunning = true
+        startTimer()
     }
 
     func pause() {
@@ -165,24 +194,38 @@ final class PomodoroManager: ObservableObject {
     func pause(at date: Date) {
         guard isRunning else { return }
 
-        // Update the remainder before clearing the deadline. If the deadline
-        // has passed, tick performs one normal phase transition first, so zero
-        // is never left on screen.
+        if isSleeping {
+            // The controls are normally unavailable during sleep, but a pause
+            // must cancel any resume that the wake handler would otherwise do.
+            deadline = nil
+            isRunning = false
+            wasRunningBeforeSleep = false
+            stopTimer()
+            return
+        }
+
+        // Settle the remainder before clearing the deadline. If the phase
+        // expired, tick performs the normal single transition and never leaves
+        // zero visible.
         tick(at: date)
         deadline = nil
         isRunning = false
+        wasRunningBeforeSleep = false
+        stopTimer()
     }
 
     func reset() {
-        // Keep the current phase, restore its complete duration, and pause.
+        // Keep the phase, restore its configured duration, and pause.
         isRunning = false
         deadline = nil
         remainingSeconds = configuration.durationSeconds(for: phase)
+        wasRunningBeforeSleep = false
+        stopTimer()
     }
 
     func previousPhase() {
-        // In this two-phase model, both controls select the other phase.
-        // Manual phase changes discard the current progress.
+        // There are only two phases, so both navigation controls select the
+        // other one. Manual navigation discards the current progress.
         switchToOtherPhase()
     }
 
@@ -195,10 +238,10 @@ final class PomodoroManager: ObservableObject {
     }
 
     func tick(at date: Date) {
-        guard isRunning, let deadline else { return }
+        guard isRunning, !isSleeping, let deadline else { return }
 
-        // Do not publish zero at the end of a phase. A delayed callback causes
-        // one transition at the observed time, and the new phase starts there.
+        // Do not publish zero. A delayed callback changes phase when it runs,
+        // and the new phase starts from that time.
         if date >= deadline {
             phase = phase.next
             remainingSeconds = configuration.durationSeconds(for: phase)
@@ -208,9 +251,9 @@ final class PomodoroManager: ObservableObject {
             return
         }
 
-        // Round up fractional seconds so a tick immediately after play still
-        // shows the full duration. The upper bound prevents a backwards clock
-        // adjustment from increasing the remainder.
+        // Round up fractional seconds so a play callback does not immediately
+        // lose a second. Cap the result so a clock moving backward cannot add
+        // time.
         let seconds = Int(ceil(deadline.timeIntervalSince(date)))
         remainingSeconds = min(
             max(0, seconds),
@@ -219,11 +262,104 @@ final class PomodoroManager: ObservableObject {
     }
 
     private func switchToOtherPhase() {
-        // Manual navigation resets the selected phase. It does not keep a
-        // history, and it always pauses and clears the running deadline.
+        // Manual navigation starts the other phase from its full duration and
+        // pauses. There is no phase history to restore.
         phase = phase.next
         remainingSeconds = configuration.durationSeconds(for: phase)
         isRunning = false
         deadline = nil
+        wasRunningBeforeSleep = false
+        stopTimer()
+    }
+
+    private func startMonitoring() {
+        sleepObserver = notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.handleSystemWillSleep(at: self.now())
+            }
+        }
+
+        wakeObserver = notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.handleSystemDidWake(at: self.now())
+            }
+        }
+    }
+
+    private func startTimer() {
+        guard timer == nil else { return }
+
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.tick()
+            }
+        }
+        self.timer = timer
+        // Common modes keep the countdown active while the menu bar is tracking
+        // input. The callback still runs on the main run loop.
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    func handleSystemWillSleep(at date: Date) {
+        guard !isSleeping else { return }
+
+        isSleeping = true
+        wasRunningBeforeSleep = isRunning
+        stopTimer()
+
+        // Keep the absolute deadline. While the phase is active, refresh the
+        // cached value without allowing sleep to switch phases.
+        if isRunning, let deadline, date < deadline {
+            updateRemainingSeconds(at: date, deadline: deadline)
+        }
+    }
+
+    func handleSystemDidWake(at date: Date) {
+        guard isSleeping else { return }
+
+        isSleeping = false
+        let shouldResume = wasRunningBeforeSleep
+        wasRunningBeforeSleep = false
+
+        guard shouldResume, isRunning, let deadline else { return }
+
+        if date >= deadline {
+            // Even if sleep spans several phase lengths, recovery makes one
+            // transition and pauses on the new phase's full duration.
+            phase = phase.next
+            remainingSeconds = configuration.durationSeconds(for: phase)
+            self.deadline = nil
+            isRunning = false
+            stopTimer()
+            return
+        }
+
+        // The original deadline includes all elapsed sleep time, so the resumed
+        // timer does not drift.
+        updateRemainingSeconds(at: date, deadline: deadline)
+        startTimer()
+    }
+
+    private func updateRemainingSeconds(at date: Date, deadline: Date) {
+        let seconds = Int(ceil(deadline.timeIntervalSince(date)))
+        remainingSeconds = min(
+            max(0, seconds),
+            configuration.durationSeconds(for: phase)
+        )
     }
 }

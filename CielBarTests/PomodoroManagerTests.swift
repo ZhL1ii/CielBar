@@ -1,10 +1,11 @@
+import AppKit
 @testable import CielBar
 import XCTest
 
 @MainActor
 final class PomodoroManagerTests: XCTestCase {
-    // A mutable clock makes transitions deterministic without wall-clock
-    // delays.
+    // A mutable clock keeps transitions deterministic without waiting on real
+    // time.
     private final class TestClock {
         var current: Date
 
@@ -222,9 +223,119 @@ final class PomodoroManagerTests: XCTestCase {
             clock.current.addingTimeInterval(60))
     }
 
+    func testWakeBeforeDeadlineCountsSleepAndContinuesRunning() {
+        let (manager, clock) = makeManager(workMinutes: 1, breakMinutes: 2)
+        let start = clock.current
+        manager.play()
+
+        clock.advance(by: 15)
+        manager.handleSystemWillSleep(at: clock.current)
+        XCTAssertEqual(manager.remainingSeconds, 45)
+
+        clock.advance(by: 20)
+        manager.handleSystemDidWake(at: clock.current)
+
+        XCTAssertEqual(manager.phase, .work)
+        XCTAssertEqual(manager.remainingSeconds, 25)
+        XCTAssertTrue(manager.isRunning)
+        XCTAssertEqual(
+            manager.deadline,
+            start.addingTimeInterval(60))
+    }
+
+    func testWakeAtDeadlineSwitchesOnceAndPauses() {
+        let (manager, clock) = makeManager(workMinutes: 1, breakMinutes: 2)
+        manager.play()
+        manager.handleSystemWillSleep(at: clock.current)
+
+        clock.advance(by: 60)
+        manager.handleSystemDidWake(at: clock.current)
+
+        XCTAssertEqual(manager.phase, .break)
+        XCTAssertEqual(manager.remainingSeconds, 120)
+        XCTAssertFalse(manager.isRunning)
+        XCTAssertNil(manager.deadline)
+
+        manager.handleSystemDidWake(at: clock.current.addingTimeInterval(60))
+        XCTAssertEqual(manager.phase, .break)
+        XCTAssertEqual(manager.remainingSeconds, 120)
+        XCTAssertFalse(manager.isRunning)
+    }
+
+    func testWakeAfterDeadlineSwitchesOnceAndPauses() {
+        let (manager, clock) = makeManager(workMinutes: 1, breakMinutes: 2)
+        manager.play()
+        manager.handleSystemWillSleep(at: clock.current)
+
+        clock.advance(by: 5 * 60)
+        manager.handleSystemDidWake(at: clock.current)
+
+        XCTAssertEqual(manager.phase, .break)
+        XCTAssertEqual(manager.remainingSeconds, 120)
+        XCTAssertFalse(manager.isRunning)
+        XCTAssertNil(manager.deadline)
+    }
+
+    func testTickDoesNotTransitionWhileSleeping() {
+        let (manager, clock) = makeManager(workMinutes: 1, breakMinutes: 2)
+        manager.play()
+        manager.handleSystemWillSleep(at: clock.current)
+
+        clock.advance(by: 61)
+        manager.tick()
+
+        XCTAssertEqual(manager.phase, .work)
+        XCTAssertEqual(manager.remainingSeconds, 60)
+        XCTAssertTrue(manager.isRunning)
+
+        manager.handleSystemDidWake(at: clock.current)
+        XCTAssertEqual(manager.phase, .break)
+        XCTAssertFalse(manager.isRunning)
+        XCTAssertNil(manager.deadline)
+    }
+
+    func testPausedManagerKeepsStateAcrossSleepAndWake() {
+        let (manager, clock) = makeManager(workMinutes: 1, breakMinutes: 2)
+        manager.nextPhase()
+        let phaseBeforeSleep = manager.phase
+        let remainingBeforeSleep = manager.remainingSeconds
+
+        manager.handleSystemWillSleep(at: clock.current)
+        clock.advance(by: 5 * 60)
+        manager.handleSystemDidWake(at: clock.current)
+
+        XCTAssertEqual(manager.phase, phaseBeforeSleep)
+        XCTAssertEqual(manager.remainingSeconds, remainingBeforeSleep)
+        XCTAssertFalse(manager.isRunning)
+        XCTAssertNil(manager.deadline)
+    }
+
+    func testSystemNotificationsDriveSleepRecovery() {
+        let notificationCenter = NotificationCenter()
+        let (manager, clock) = makeManager(
+            workMinutes: 1,
+            breakMinutes: 2,
+            notificationCenter: notificationCenter)
+        manager.play()
+
+        notificationCenter.post(
+            name: NSWorkspace.willSleepNotification,
+            object: nil)
+        clock.advance(by: 61)
+        notificationCenter.post(
+            name: NSWorkspace.didWakeNotification,
+            object: nil)
+
+        XCTAssertEqual(manager.phase, .break)
+        XCTAssertEqual(manager.remainingSeconds, 120)
+        XCTAssertFalse(manager.isRunning)
+        XCTAssertNil(manager.deadline)
+    }
+
     private func makeManager(
         workMinutes: Int,
-        breakMinutes: Int
+        breakMinutes: Int,
+        notificationCenter: NotificationCenter = NotificationCenter()
     ) -> (PomodoroManager, TestClock) {
         let clock = TestClock()
         let configuration = PomodoroConfiguration(
@@ -232,7 +343,8 @@ final class PomodoroManagerTests: XCTestCase {
             breakDurationMinutes: breakMinutes)
         let manager = PomodoroManager(
             configuration: configuration,
-            now: { clock.current })
+            now: { clock.current },
+            notificationCenter: notificationCenter)
         return (manager, clock)
     }
 }
