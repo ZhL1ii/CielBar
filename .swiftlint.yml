@@ -1,0 +1,25 @@
+excluded:
+  - .build
+  - build
+  - DerivedData
+
+only_rules:
+  - duplicate_conditions
+  - duplicate_enum_cases
+  - duplicate_imports
+  - duplicated_key_in_dictionary_literal
+  - identical_operands
+
+  - force_cast
+  - force_try
+  - force_unwrapping
+
+  - unneeded_break_in_switch
+  - unused_closure_parameter
+  - unused_control_flow_label
+  - unused_enumerated
+  - unused_optional_binding
+  - unused_setter_value
+
+  - empty_count
+  - empty_string

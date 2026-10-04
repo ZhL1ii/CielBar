@@ -1,0 +1,37 @@
+{
+  "version": 1,
+
+  "lineLength": 120,
+
+  "indentation": {
+    "spaces": 4
+  },
+
+  "indentConditionalCompilationBlocks": false,
+  "prioritizeKeepingFunctionOutputTogether": true,
+
+  "rules": {
+    "AlwaysUseLowerCamelCase": false,
+    "AmbiguousTrailingClosureOverload": false,
+    "AvoidRetroactiveConformances": false,
+
+    "DontRepeatTypeInStaticProperties": false,
+    "FileScopedDeclarationPrivacy": false,
+    "FullyIndirectEnum": false,
+    "GroupNumericLiterals": false,
+    "IdentifiersMustBeASCII": false,
+
+    "NoAccessLevelOnExtensionDeclaration": false,
+    "NoBlockComments": false,
+    "NoPlaygroundLiterals": false,
+
+    "OnlyOneTrailingClosureArgument": false,
+
+    "ReplaceForEachWithForLoop": false,
+
+    "TypeNamesShouldBeCapitalized": false,
+    "UseExplicitNilCheckInConditions": false,
+    "UseLetInEveryBoundCaseVariable": false,
+    "UseSynthesizedInitializer": false
+  }
+}
