@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 struct YabaiWindow: WindowModel {
@@ -12,6 +13,8 @@ struct YabaiWindow: WindowModel {
     let role: String?
     let subrole: String?
     let hasAXReference: Bool?
+    let level: Int
+    let canResize: Bool?
     let isMinimized: Bool
     let isHidden: Bool
     let isFloating: Bool
@@ -24,6 +27,8 @@ struct YabaiWindow: WindowModel {
             return false
         }
         guard hasAXReference != false else { return false }
+        // Menus and tooltips are separate windows, but should not get workspace icons.
+        guard level < Int(CGWindowLevelForKey(.popUpMenuWindow)) else { return false }
         return !isMinimized && !isHidden && !isSticky
     }
 
@@ -38,6 +43,8 @@ struct YabaiWindow: WindowModel {
         case role
         case subrole
         case hasAXReference = "has-ax-reference"
+        case level
+        case canResize = "can-resize"
         case isMinimized = "is-minimized"
         case isHidden = "is-hidden"
         case isFloating = "is-floating"
@@ -61,6 +68,8 @@ struct YabaiWindow: WindowModel {
         hasAXReference = try container.decodeIfPresent(
             Bool.self, forKey: .hasAXReference
         )
+        level = try container.decodeIfPresent(Int.self, forKey: .level) ?? 0
+        canResize = try container.decodeIfPresent(Bool.self, forKey: .canResize)
         isMinimized = try container.decodeIfPresent(
             Bool.self, forKey: .isMinimized
         ) ?? false

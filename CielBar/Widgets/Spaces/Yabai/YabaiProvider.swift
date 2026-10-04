@@ -95,7 +95,29 @@ class YabaiSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
         }
         var resultSpaces = Array(spaceDict.values)
         for i in 0..<resultSpaces.count {
-            resultSpaces[i].windows.sort { $0.stackIndex < $1.stackIndex }
+            let spaceWindows = resultSpaces[i].windows
+            var mergedDialogIDs = Set<Int>()
+            var focusedDialogs: [Int: YabaiWindow] = [:]
+            for dialog in spaceWindows
+            where dialog.subrole == "AXDialog" && dialog.canResize == false {
+                guard let pid = dialog.appPid else { continue }
+                let standardWindows = spaceWindows.filter {
+                    $0.appPid == pid && $0.subrole == "AXStandardWindow"
+                }
+                // Without a parent ID, merge only when there is one possible app window.
+                guard standardWindows.count == 1, let standardWindow = standardWindows.first else {
+                    continue
+                }
+                mergedDialogIDs.insert(dialog.id)
+                if dialog.isFocused {
+                    // Keep the actual focused ID so icon clicks and focus events still match.
+                    focusedDialogs[standardWindow.id] = dialog
+                }
+            }
+            resultSpaces[i].windows = spaceWindows
+                .filter { !mergedDialogIDs.contains($0.id) }
+                .map { focusedDialogs[$0.id] ?? $0 }
+                .sorted { $0.stackIndex < $1.stackIndex }
         }
         return resultSpaces.filter { !$0.windows.isEmpty }
     }

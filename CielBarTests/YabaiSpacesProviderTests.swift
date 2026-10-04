@@ -2,6 +2,68 @@
 import XCTest
 
 final class YabaiSpacesProviderTests: XCTestCase {
+    func testBuildSpacesHandlesTransientWindows() throws {
+        let decoder = JSONDecoder()
+        let spaces = try decoder.decode(
+            [YabaiSpace].self,
+            from: Data(#"[{"index": 3, "has-focus": true}]"#.utf8)
+        )
+        let cases = [
+            ("Input source switch", 3, false, 10, 1),
+            ("WeChat emoji picker", 0, true, 10, 2),
+            ("WeChat quit prompt", 8, false, 10, 1),
+            // A separate process keeps dialog merging from masking level filtering.
+            ("Prism tooltip", 1000, false, 11, 1),
+            ("Popup menu", 101, false, 11, 1),
+            ("Help popup", 200, false, 11, 1),
+        ]
+
+        for (name, level, dialogFocused, dialogPID, expectedID) in cases {
+            let windows = try decoder.decode(
+                [YabaiWindow].self,
+                from: Data(
+                    """
+                    [
+                      {"id": 2, "pid": \(dialogPID), "space": 3, "stack-index": 1,
+                       "role": "AXWindow", "subrole": "AXDialog", "root-window": true,
+                       "level": \(level), "can-resize": false, "has-focus": \(dialogFocused),
+                       "is-hidden": false, "is-floating": true, "is-sticky": false},
+                      {"id": 1, "pid": 10, "space": 3, "stack-index": 1,
+                       "role": "AXWindow", "subrole": "AXStandardWindow", "level": 0,
+                       "has-focus": \(!dialogFocused),
+                       "is-hidden": false, "is-floating": false, "is-sticky": false},
+                      {"id": 3, "pid": 20, "space": 3, "stack-index": 2,
+                       "role": "AXWindow", "subrole": "AXStandardWindow", "level": 3,
+                       "has-focus": false, "is-hidden": false,
+                       "is-floating": true, "is-sticky": false},
+                      {"id": 4, "pid": 30, "space": 3, "stack-index": 3,
+                       "role": "AXWindow", "subrole": "AXDialog", "level": 8,
+                       "can-resize": false, "has-focus": false,
+                       "is-hidden": false, "is-floating": true, "is-sticky": false},
+                      {"id": 5, "pid": 40, "space": 3, "stack-index": 4,
+                       "role": "AXWindow", "subrole": "AXStandardWindow",
+                       "has-focus": false, "is-hidden": false,
+                       "is-floating": false, "is-sticky": false},
+                      {"id": 6, "pid": 40, "space": 3, "stack-index": 5,
+                       "role": "AXWindow", "subrole": "AXStandardWindow",
+                       "has-focus": false, "is-hidden": false,
+                       "is-floating": false, "is-sticky": false},
+                      {"id": 7, "pid": 40, "space": 3, "stack-index": 6,
+                       "role": "AXWindow", "subrole": "AXDialog",
+                       "can-resize": false, "has-focus": false,
+                       "is-hidden": false, "is-floating": true, "is-sticky": false}
+                    ]
+                    """.utf8
+                )
+            )
+            let result = YabaiSpacesProvider.buildSpaces(spaces: spaces, windows: windows)
+            let displayedWindows = try XCTUnwrap(result.first?.windows, name)
+
+            XCTAssertEqual(displayedWindows.map(\.id), [expectedID, 3, 4, 5, 6, 7], name)
+            XCTAssertEqual(displayedWindows.filter(\.isFocused).map(\.id), [expectedID], name)
+        }
+    }
+
     func testBuildSpacesAppliesWindowDisplayPolicy() throws {
         let decoder = JSONDecoder()
         let spaces = try decoder.decode(
