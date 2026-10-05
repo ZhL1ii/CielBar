@@ -52,15 +52,13 @@ struct MenuBarView: View {
             BatteryWidget().environmentObject(config)
 
         case "default.pomodoro":
-            PomodoroWidget(
-                configuration: PomodoroConfiguration(config: config.config)
-            )
-            .environmentObject(config)
+            PomodoroWidget()
+                .environmentObject(config)
 
         case "default.time":
             TimeWidget(calendarManager: CalendarManager(configProvider: config))
                 .environmentObject(config)
-            
+
         case "default.nowplaying":
             NowPlayingWidget()
                 .environmentObject(config)

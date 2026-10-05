@@ -3,78 +3,81 @@ import SwiftUI
 /// Controls the manager shared by the bar widget and its popup.
 struct PomodoroPopup: View {
     @ObservedObject var manager: PomodoroManager
+    @StateObject private var editor: PomodoroEditor
+
+    init(manager: PomodoroManager) {
+        self.manager = manager
+        _editor = StateObject(wrappedValue: PomodoroEditor(manager: manager))
+    }
 
     var body: some View {
         VStack(spacing: 14) {
-            PomodoroTimeView(
-                phase: manager.phase,
-                formattedTime: manager.formattedRemainingTime
-            )
-            .font(.system(size: 30, weight: .semibold))
-
-            HStack(spacing: 12) {
-                controlButton(
-                    systemImageName: "backward.end.fill",
-                    accessibilityLabel: "Previous phase"
-                ) {
-                    manager.previousPhase()
+            HStack(spacing: 6) {
+                timeField(.minutes)
+                Text(":").font(.system(size: 32, weight: .semibold))
+                timeField(.seconds)
+            }
+            HStack(spacing: 20) {
+                controlButton("arrow.counterclockwise", label: "Reset timer") {
+                    editor.reset()
                 }
-
                 controlButton(
-                    systemImageName: "arrow.counterclockwise",
-                    accessibilityLabel: "Reset timer"
+                    manager.isRunning ? "pause.fill" : "play.fill",
+                    label: manager.isRunning ? "Pause timer" : "Start timer"
                 ) {
-                    manager.reset()
+                    if manager.isRunning { manager.pause() } else { manager.play() }
                 }
-
-                controlButton(
-                    systemImageName: manager.isRunning
-                        ? "pause.fill" : "play.fill",
-                    accessibilityLabel: manager.isRunning
-                        ? "Pause timer" : "Start timer"
-                ) {
-                    if manager.isRunning {
-                        manager.pause()
-                    } else {
-                        manager.play()
-                    }
-                }
-
-                controlButton(
-                    systemImageName: "forward.end.fill",
-                    accessibilityLabel: "Next phase"
-                ) {
-                    manager.nextPhase()
+                .disabled(!manager.isRunning && !editor.canPlay)
+                controlButton("forward.end.fill", label: "Skip phase") {
+                    editor.skip()
                 }
             }
         }
-        .frame(width: 200, height: 120)
+        .padding(20)
+        .frame(width: 210)
         .foregroundStyle(.white)
+        .disabled(!manager.isReady)
+        .onReceive(NotificationCenter.default.publisher(for: .willHideWindow)) { _ in
+            editor.commit()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .willChangeContent)) { _ in
+            editor.commit()
+        }
+        .onDisappear { editor.commit() }
+    }
+
+    private func timeField(_ value: PomodoroEditor.Field) -> some View {
+        PomodoroTimeField(
+            editor: editor, field: value,
+            text: editor.text(for: value), isEditable: manager.canEdit,
+            isEditing: editor.editingField == value
+        )
+        .frame(width: 58, height: 40)
+        .opacity(manager.isDimmed ? 0.8 : 1)
     }
 
     private func controlButton(
-        systemImageName: String,
-        accessibilityLabel: String,
-        action: @escaping () -> Void
+        _ image: String, label: String, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: systemImageName)
+            Image(systemName: image)
                 .font(.system(size: 15, weight: .semibold))
                 .frame(width: 24, height: 24)
         }
         .buttonStyle(PomodoroControlButtonStyle())
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityLabel(label)
     }
 }
 
 private struct PomodoroControlButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .padding(5)
-            .background(
-                Color.white.opacity(configuration.isPressed ? 0.25 : 0.001)
-            )
+            .background(Color.white.opacity(configuration.isPressed ? 0.25 : 0.001))
             .clipShape(RoundedRectangle(cornerRadius: 6))
+            .opacity(isEnabled ? 1 : 0.4)
     }
 }
 
