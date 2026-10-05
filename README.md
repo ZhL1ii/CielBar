@@ -63,6 +63,8 @@ The [default configuration](example/config.toml) contains the complete default T
 
 To use the Pomodoro widget, add `"default.pomodoro"` to `widgets.displayed`.
 
+Set durations in the timer popup using `MM:SS`, up to `99:59`. Click a field to enter a value, or use ↑ / ↓ to adjust it. Settings persist across restarts.
+
 ## Notes
 
 CielBar replaces the visual menu bar, but it does not currently provide application menu items such as File, Edit, or View. If you need those menus, keep the macOS system menu bar available.
