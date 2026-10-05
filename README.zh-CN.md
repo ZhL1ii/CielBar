@@ -63,6 +63,8 @@ CielBar 也支持 XDG 风格的路径 `~/.config/cielbar/config.toml`。如果 C
 
 番茄钟组件默认不会启用。如需使用，请将 `"default.pomodoro"` 添加到 `widgets.displayed` 中。
 
+可在计时器弹窗中以 `MM:SS` 格式设置时间，最长 `99:59`。点击时间可直接输入，也可以使用 ↑ / ↓ 调整。设置会一直保留。
+
 ## 注意事项
 
 CielBar 替代的是菜单栏的视觉显示，目前不提供 File、Edit、View 等应用菜单项。如果需要这些菜单，请保留 macOS 系统菜单栏。

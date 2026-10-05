@@ -124,12 +124,7 @@ final class ConfigManager: ObservableObject {
             [widgets.default.time.popup]
             view-variant = "box"
 
-            [widgets.default.pomodoro]
-            # Durations are whole minutes from 1 through 1440.
-            # Missing or invalid work and break values use 45 and 10 minutes,
-            # respectively.
-            work-duration = 45
-            break-duration = 10
+            # Pomodoro durations are set in its popup and saved separately, not in TOML.
             
             ### EXPERIMENTAL, WILL BE REPLACED BY STYLE API IN THE FUTURE
             [experimental.background]

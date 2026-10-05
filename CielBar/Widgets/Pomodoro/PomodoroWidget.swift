@@ -3,22 +3,22 @@ import SwiftUI
 /// The widget owns the manager shared with its popup, so a configuration
 /// reload does not reset an active countdown.
 struct PomodoroWidget: View {
-    @EnvironmentObject private var configProvider: ConfigProvider
     @StateObject var manager: PomodoroManager
     @State private var rect: CGRect = .zero
 
-    init(configuration: PomodoroConfiguration = .defaultValue) {
-        _manager = StateObject(
-            wrappedValue: PomodoroManager(configuration: configuration))
+    init() {
+        _manager = StateObject(wrappedValue: PomodoroManager(settingsStore: .shared))
     }
 
     var body: some View {
-        PomodoroTimeView(
-            phase: manager.phase,
-            formattedTime: manager.formattedRemainingTime
+        PomodoroProgressView(
+            minutes: manager.barMinutes,
+            remainingRatio: manager.remainingRatio,
+            isDimmed: manager.isDimmed
         )
-        .font(.headline)
-        .fontWeight(.semibold)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(manager.phase == .work ? "Work timer" : "Break timer")
+        .accessibilityValue(manager.formattedRemainingTime)
         .experimentalConfiguration(cornerRadius: 15)
         .frame(maxHeight: .infinity)
         .background(.black.opacity(0.001))
@@ -41,39 +41,31 @@ struct PomodoroWidget: View {
                 PomodoroPopup(manager: manager)
             }
         }
-        .onAppear {
-            updateConfiguration(from: configProvider.config)
-        }
-        .onReceive(configProvider.$config) { config in
-            updateConfiguration(from: config)
-        }
-    }
-
-    private func updateConfiguration(from config: ConfigData) {
-        // ConfigManager may recreate this provider when it reloads the file.
-        // Apply the current snapshot and keep listening for later changes.
-        manager.updateConfiguration(PomodoroConfiguration(config: config))
+        .task { await manager.loadSettings() }
     }
 }
 
-/// The bar and popup share this view for their time and break-phase styling.
-struct PomodoroTimeView: View {
-    let phase: PomodoroPhase
-    let formattedTime: String
+/// A single remaining arc, starting at noon and retreating clockwise.
+struct PomodoroProgressView: View {
+    let minutes: String
+    let remainingRatio: Double
+    let isDimmed: Bool
 
     var body: some View {
-        Text(formattedTime)
-            .monospacedDigit()
-            // Use the same padding in both phases so the countdown does not move
-            // when the border style changes.
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
-            .overlay {
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(
-                        style: StrokeStyle(
-                            lineWidth: 1,
-                            dash: phase == .break ? [3, 2] : []))
+        ZStack {
+            if remainingRatio > 0 {
+                Circle()
+                    .trim(from: 0, to: remainingRatio)
+                    .stroke(style: StrokeStyle(lineWidth: 1.5, lineCap: .butt))
+                    .rotationEffect(.degrees(-90))
+                    .padding(1)
             }
+            Text(minutes)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+                .opacity(isDimmed ? 0.8 : 1)
+        }
+        .frame(width: 24, height: 24)
+        .padding(.horizontal, 3)
     }
 }
