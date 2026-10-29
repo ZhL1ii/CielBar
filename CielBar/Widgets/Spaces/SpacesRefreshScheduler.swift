@@ -3,6 +3,7 @@ import Foundation
 struct SpacesRefreshSnapshot {
     let spaces: [AnySpace]
     let providerGeneration: Int
+    var connectionRevision: Int = 0
 }
 
 final class SpacesRefreshScheduler {
@@ -24,7 +25,6 @@ final class SpacesRefreshScheduler {
     private var needsFollowUpRefresh = false
     private var followUpRefreshPolicy: SpacesRefreshPolicy = .debounced
     private var isStopped = false
-    private var lastPublishedSpaces: [AnySpace] = []
 
     init(
         debounceInterval: TimeInterval = 0.1,
@@ -113,20 +113,15 @@ final class SpacesRefreshScheduler {
             guard let self else { return }
             guard !self.isStopped else { return }
 
-            guard let snapshot,
-                snapshot.spaces != self.lastPublishedSpaces
-            else {
+            guard let snapshot else {
                 self.completeRefreshLocked(reason: reason)
                 return
             }
 
             DispatchQueue.main.async { [weak self, publishHandler] in
-                let wasPublished = publishHandler(snapshot)
+                _ = publishHandler(snapshot)
                 self?.stateQueue.async { [weak self] in
                     guard let self else { return }
-                    if wasPublished {
-                        self.lastPublishedSpaces = snapshot.spaces
-                    }
                     self.completeRefreshLocked(reason: reason)
                 }
             }

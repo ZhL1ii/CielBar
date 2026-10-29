@@ -20,25 +20,16 @@ class YabaiSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
         eventMonitor?.startMonitoring(onChange: onChange)
     }
 
+    func checkConnection() {
+        eventMonitor?.checkConnection()
+    }
+
     func stopMonitoring() {
         eventMonitor?.stopMonitoring()
     }
 
     private func runYabaiCommand(arguments: [String]) -> Data? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executablePath)
-        process.arguments = arguments
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        do {
-            try process.run()
-        } catch {
-            print("Yabai error: \(error)")
-            return nil
-        }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return data
+        try? SpacesCommand.run(executablePath: executablePath, arguments: arguments)
     }
 
     private func fetchSpaces() -> [YabaiSpace]? {
@@ -124,22 +115,6 @@ class YabaiSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
 
     func focusSpace(spaceId: String, needWindowFocus: Bool) {
         _ = runYabaiCommand(arguments: ["-m", "space", "--focus", spaceId])
-        if !needWindowFocus { return }
-
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(
-            deadline: .now() + 0.1
-        ) {
-            if let spaces = self.getSpacesWithWindows() {
-                if let space = spaces.first(where: { $0.id == Int(spaceId) }) {
-                    let hasFocused = space.windows.contains { $0.isFocused }
-                    if !hasFocused, let firstWindow = space.windows.first {
-                        _ = self.runYabaiCommand(arguments: [
-                            "-m", "window", "--focus", String(firstWindow.id),
-                        ])
-                    }
-                }
-            }
-        }
     }
 
     func focusWindow(windowId: String) {
