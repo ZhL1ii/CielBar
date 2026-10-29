@@ -8,8 +8,16 @@ struct SpacesWidget: View {
 
     var body: some View {
         HStack(spacing: foregroundHeight < 30 ? 0 : 8) {
+            if viewModel.isReconnecting {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.caption)
+                    .help("Reconnecting to window manager…")
+                    .accessibilityLabel("Reconnecting to window manager")
+            }
             ForEach(viewModel.spaces) { space in
                 SpaceView(space: space)
+                    .allowsHitTesting(!viewModel.isReconnecting)
+                    .disabled(viewModel.isReconnecting)
             }
         }
         .experimentalConfiguration(horizontalPadding: 5, cornerRadius: 10)

@@ -37,6 +37,12 @@ enum SpacesChangeReason: String {
     case focusSpaceWindow = "focus-space-window"
     case focusWindow = "focus-window"
     case providerLifecycle = "provider-lifecycle"
+    case providerConnection = "provider-connection"
+}
+
+enum SpacesConnectionState {
+    case connected
+    case reconnecting
 }
 
 struct SpacesFocusChange {
@@ -49,15 +55,18 @@ struct SpacesProviderChange {
     let reason: SpacesChangeReason
     let focusChange: SpacesFocusChange?
     let refreshPolicy: SpacesRefreshPolicy
+    let connectionState: SpacesConnectionState?
 
     init(
         reason: SpacesChangeReason,
         focusChange: SpacesFocusChange? = nil,
-        refreshPolicy: SpacesRefreshPolicy = .debounced
+        refreshPolicy: SpacesRefreshPolicy = .debounced,
+        connectionState: SpacesConnectionState? = nil
     ) {
         self.reason = reason
         self.focusChange = focusChange
         self.refreshPolicy = refreshPolicy
+        self.connectionState = connectionState
     }
 }
 
@@ -65,6 +74,7 @@ protocol SpacesEventMonitoring {
     func startMonitoring(
         onChange: @escaping (SpacesProviderChange) -> Void)
     func stopMonitoring()
+    func checkConnection()
 }
 
 protocol SwitchableSpacesProvider: SpacesProvider {
@@ -188,6 +198,7 @@ class AnySpacesProvider {
         @escaping (SpacesProviderChange) -> Void
     ) -> Void
     private let _stopMonitoring: () -> Void
+    private let _checkConnection: () -> Void
 
     init<P: SpacesProvider>(_ provider: P) {
         _getSpacesWithWindows = {
@@ -213,9 +224,11 @@ class AnySpacesProvider {
             _stopMonitoring = {
                 eventMonitor.stopMonitoring()
             }
+            _checkConnection = { eventMonitor.checkConnection() }
         } else {
             _startMonitoring = { _ in }
             _stopMonitoring = {}
+            _checkConnection = {}
         }
     }
 
@@ -239,5 +252,9 @@ class AnySpacesProvider {
 
     func stopMonitoring() {
         _stopMonitoring()
+    }
+
+    func checkConnection() {
+        _checkConnection()
     }
 }

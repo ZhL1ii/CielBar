@@ -6,6 +6,8 @@ final class YabaiSignalMonitor {
 
     private struct RegisteredSignal: Decodable {
         let label: String?
+        let event: String?
+        let action: String?
     }
 
     static let focusEvents = [
@@ -39,6 +41,11 @@ final class YabaiSignalMonitor {
     private var registeredLabels = Set<String>()
     private var onChange: ChangeHandler?
     private var isMonitoring = false
+    private var connectionState: SpacesConnectionState?
+    private var hasReportedFailure = false
+    private var retryWorkItem: DispatchWorkItem?
+    private var retryRequestID = 0
+    private var retryAttempt = 0
 
     init(executablePath: String) {
         self.executablePath = executablePath
@@ -53,8 +60,7 @@ final class YabaiSignalMonitor {
 
             self.isMonitoring = true
             self.installSignalSourceLocked()
-            self.removeStaleSignalsLocked()
-            self.registerSignalsLocked()
+            self.reconcileSignalsLocked()
         }
     }
 
@@ -109,54 +115,87 @@ final class YabaiSignalMonitor {
         return "/bin/kill -\(signalName) \(processIdentifier)"
     }
 
-    private func removeStaleSignalsLocked() {
-        guard
-            let data = runYabaiCommand(
-                arguments: ["-m", "signal", "--list"],
-                captureOutput: true)
-        else {
-            print(
-                "Yabai signal monitor could not list stale signals; "
-                    + "using fallback polling")
-            return
-        }
-
-        let signals: [RegisteredSignal]
-        do {
-            signals = try JSONDecoder().decode(
-                [RegisteredSignal].self, from: data)
-        } catch {
-            print("Decode yabai signals error: \(error)")
-            return
-        }
-
-        for label in signals.compactMap(\.label)
-        where label.hasPrefix(Self.labelPrefix) {
-            _ = removeSignalLocked(label: label)
+    func checkConnection() {
+        stateQueue.async { [weak self] in
+            guard let self, self.isMonitoring, self.retryWorkItem == nil else { return }
+            self.reconcileSignalsLocked()
         }
     }
 
-    private func registerSignalsLocked() {
-        for event in Self.monitoredEvents {
-            let label = Self.labelPrefix
-                + "\(processIdentifier).\(event)"
-            let action = Self.action(
-                for: event, processIdentifier: processIdentifier)
-            let wasAdded = runYabaiCommand(arguments: [
-                "-m", "signal", "--add",
-                "event=\(event)",
-                "action=\(action)",
-                "label=\(label)",
-            ]) != nil
+    private func reconcileSignalsLocked() {
+        guard isMonitoring else { return }
+        guard let data = runYabaiCommand(arguments: ["-m", "signal", "--list"]),
+            let signals = try? JSONDecoder().decode([RegisteredSignal].self, from: data)
+        else {
+            scheduleRetryLocked()
+            return
+        }
 
-            if wasAdded {
-                registeredLabels.insert(label)
-            } else {
-                print(
-                    "Yabai signal monitor could not register \(event); "
-                        + "using fallback polling")
+        // Remove registrations left by exited CielBar instances, never another live instance.
+        let ownPrefix = Self.labelPrefix + "\(processIdentifier)."
+        for label in signals.compactMap(\.label)
+        where label.hasPrefix(Self.labelPrefix) && !label.hasPrefix(ownPrefix) {
+            let suffix = label.dropFirst(Self.labelPrefix.count)
+            if let pidText = suffix.split(separator: ".").first,
+                let pid = Int32(pidText), pid > 0,
+                Darwin.kill(pid, 0) == -1 && errno == ESRCH
+            {
+                _ = removeSignalLocked(label: label)
             }
         }
+
+        let missingEvents = Self.monitoredEvents.filter { event in
+            !signals.contains {
+                $0.label == ownPrefix + event && $0.event == event
+                    && $0.action == Self.action(for: event, processIdentifier: processIdentifier)
+            }
+        }
+        if !missingEvents.isEmpty { setConnectionStateLocked(.reconnecting) }
+        for event in missingEvents {
+            let label = ownPrefix + event
+            // A labelled add replaces an existing registration with the same label.
+            guard runYabaiCommand(arguments: [
+                "-m", "signal", "--add", "event=\(event)",
+                "action=\(Self.action(for: event, processIdentifier: processIdentifier))",
+                "label=\(label)",
+            ]) != nil else {
+                scheduleRetryLocked()
+                return
+            }
+            registeredLabels.insert(label)
+        }
+        registeredLabels = Set(Self.monitoredEvents.map { ownPrefix + $0 })
+        retryAttempt = 0
+        setConnectionStateLocked(.connected)
+    }
+
+    private func setConnectionStateLocked(_ state: SpacesConnectionState, reason: String? = nil) {
+        if state == .connected { hasReportedFailure = false }
+        if let reason, !hasReportedFailure {
+            print("Yabai event connection failed: \(reason)")
+            hasReportedFailure = true
+        }
+        guard connectionState != state else { return }
+        connectionState = state
+        print("Yabai events: \(state)")
+        onChange?(SpacesProviderChange(
+            reason: .providerConnection, refreshPolicy: .immediate, connectionState: state))
+    }
+
+    private func scheduleRetryLocked() {
+        setConnectionStateLocked(.reconnecting)
+        guard isMonitoring, retryWorkItem == nil else { return }
+        let delay = min(pow(2, Double(retryAttempt)), 10)
+        retryAttempt = min(retryAttempt + 1, 4)
+        retryRequestID += 1
+        let requestID = retryRequestID
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.isMonitoring, self.retryRequestID == requestID else { return }
+            self.retryWorkItem = nil
+            self.reconcileSignalsLocked()
+        }
+        retryWorkItem = workItem
+        stateQueue.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 
     private func stopMonitoringLocked() {
@@ -169,13 +208,24 @@ final class YabaiSignalMonitor {
 
         isMonitoring = false
         onChange = nil
+        retryWorkItem?.cancel()
+        retryWorkItem = nil
+        retryRequestID += 1
+        retryAttempt = 0
+        connectionState = nil
+        hasReportedFailure = false
         genericSignalSource?.cancel()
         genericSignalSource = nil
         focusSignalSource?.cancel()
         focusSignalSource = nil
 
-        for label in registeredLabels {
-            _ = removeSignalLocked(label: label)
+        // A missing label is harmless: clean only registrations that still exist remotely.
+        if let data = runYabaiCommand(arguments: ["-m", "signal", "--list"]),
+            let signals = try? JSONDecoder().decode([RegisteredSignal].self, from: data)
+        {
+            for label in signals.compactMap(\.label) where registeredLabels.contains(label) {
+                _ = removeSignalLocked(label: label)
+            }
         }
         registeredLabels.removeAll(keepingCapacity: false)
     }
@@ -192,34 +242,14 @@ final class YabaiSignalMonitor {
         return true
     }
 
-    private func runYabaiCommand(
-        arguments: [String], captureOutput: Bool = false
-    ) -> Data? {
-        let process = Process()
-        let outputPipe = captureOutput ? Pipe() : nil
-        process.executableURL = URL(fileURLWithPath: executablePath)
-        process.arguments = arguments
-        process.standardOutput = outputPipe ?? FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-
+    private func runYabaiCommand(arguments: [String]) -> Data? {
         do {
-            try process.run()
+            return try SpacesCommand.run(executablePath: executablePath, arguments: arguments)
         } catch {
-            print("Yabai signal monitor launch error: \(error)")
+            if isMonitoring {
+                setConnectionStateLocked(.reconnecting, reason: error.localizedDescription)
+            }
             return nil
         }
-
-        let data = outputPipe?.fileHandleForReading.readDataToEndOfFile()
-            ?? Data()
-        process.waitUntilExit()
-        guard process.terminationReason == .exit,
-            process.terminationStatus == 0
-        else {
-            print(
-                "Yabai signal command exited with status "
-                    + "\(process.terminationStatus)")
-            return nil
-        }
-        return data
     }
 }

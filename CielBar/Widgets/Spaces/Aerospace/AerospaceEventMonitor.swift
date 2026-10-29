@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 enum AerospaceEventJSONLParser {
@@ -73,7 +74,7 @@ final class AerospaceEventMonitor {
     private let stateQueue = DispatchQueue(
         label: "moe.ciel.CielBar.aerospace-event-monitor")
     private let stateQueueKey = DispatchSpecificKey<Void>()
-    private let maximumRetryDelay: TimeInterval = 30
+    private let maximumRetryDelay: TimeInterval = 10
 
     private var process: Process?
     private var outputHandle: FileHandle?
@@ -83,7 +84,9 @@ final class AerospaceEventMonitor {
     private var retryAttempt = 0
     private var onChange: ChangeHandler?
     private var isMonitoring = false
-    private var isStoppingProcess = false
+    private var connectionState: SpacesConnectionState?
+    private var hasReportedFailure = false
+    private var connectionTimeout: DispatchWorkItem?
 
     init(executablePath: String) {
         self.executablePath = executablePath
@@ -94,7 +97,10 @@ final class AerospaceEventMonitor {
         stateQueue.async { [weak self] in
             guard let self else { return }
             self.onChange = onChange
-            guard !self.isMonitoring else { return }
+            guard !self.isMonitoring else {
+                self.startProcessLocked()
+                return
+            }
 
             self.isMonitoring = true
             self.startProcessLocked()
@@ -111,6 +117,25 @@ final class AerospaceEventMonitor {
         }
     }
 
+    func checkConnection() {
+        stateQueue.async { [weak self] in
+            self?.startProcessLocked()
+        }
+    }
+
+    private func setConnectionStateLocked(_ state: SpacesConnectionState, reason: String? = nil) {
+        if state == .connected { hasReportedFailure = false }
+        if let reason, !hasReportedFailure {
+            print("AeroSpace event connection failed: \(reason)")
+            hasReportedFailure = true
+        }
+        guard connectionState != state else { return }
+        connectionState = state
+        print("AeroSpace events: \(state)")
+        onChange?(SpacesProviderChange(
+            reason: .providerConnection, refreshPolicy: .immediate, connectionState: state))
+    }
+
     private func startProcessLocked() {
         guard isMonitoring, process == nil, retryWorkItem == nil else {
             return
@@ -121,8 +146,9 @@ final class AerospaceEventMonitor {
         let outputHandle = outputPipe.fileHandleForReading
 
         process.executableURL = URL(fileURLWithPath: executablePath)
-        process.arguments = ["subscribe", "--no-send-initial"]
+        process.arguments = ["subscribe"]
             + Self.subscribedEvents
+        process.standardInput = FileHandle.nullDevice
         process.standardOutput = outputPipe
         process.standardError = FileHandle.nullDevice
 
@@ -144,12 +170,18 @@ final class AerospaceEventMonitor {
         self.process = process
         self.outputHandle = outputHandle
         outputBuffer.removeAll(keepingCapacity: true)
-        isStoppingProcess = false
-
         do {
             try process.run()
+            let timeout = DispatchWorkItem { [weak self, weak process] in
+                guard let self, let process, self.process === process,
+                    self.connectionState != .connected, process.isRunning
+                else { return }
+                Darwin.kill(process.processIdentifier, SIGKILL)
+            }
+            connectionTimeout = timeout
+            stateQueue.asyncAfter(deadline: .now() + 3, execute: timeout)
         } catch {
-            print("AeroSpace event monitor launch error: \(error)")
+            setConnectionStateLocked(.reconnecting, reason: error.localizedDescription)
             cleanUpProcessLocked(process)
             scheduleRetryLocked()
         }
@@ -174,7 +206,10 @@ final class AerospaceEventMonitor {
             return
         }
 
+        connectionTimeout?.cancel()
+        connectionTimeout = nil
         retryAttempt = 0
+        setConnectionStateLocked(.connected)
         onChange?(
             SpacesProviderChange(
                 reason: .providerEvent,
@@ -184,24 +219,13 @@ final class AerospaceEventMonitor {
     private func handleTerminationLocked(_ process: Process) {
         guard self.process === process else { return }
 
-        let wasStoppingProcess = isStoppingProcess
-        let terminationReason = process.terminationReason
-        let terminationStatus = process.terminationStatus
+        let reason = process.terminationReason == .exit
+            ? "Subscription exited with status \(process.terminationStatus)"
+            : "Subscription terminated by signal \(process.terminationStatus)"
         cleanUpProcessLocked(process)
-
         guard isMonitoring else { return }
-        if wasStoppingProcess {
-            startProcessLocked()
-        } else if terminationReason == .uncaughtSignal {
-            print(
-                "AeroSpace event monitor terminated by signal "
-                    + "\(terminationStatus); retrying")
-            scheduleRetryLocked()
-        } else if terminationStatus != 0 {
-            print(
-                "AeroSpace event monitor exited with status "
-                    + "\(terminationStatus); using fallback polling")
-        }
+        setConnectionStateLocked(.reconnecting, reason: reason)
+        scheduleRetryLocked()
     }
 
     private func scheduleRetryLocked() {
@@ -216,7 +240,7 @@ final class AerospaceEventMonitor {
         let requestID = retryRequestID
 
         let workItem = DispatchWorkItem { [weak self] in
-            guard let self, self.retryRequestID == requestID else { return }
+            guard let self, self.isMonitoring, self.retryRequestID == requestID else { return }
             self.retryWorkItem = nil
             self.startProcessLocked()
         }
@@ -234,28 +258,29 @@ final class AerospaceEventMonitor {
         outputBuffer.removeAll(keepingCapacity: false)
         outputHandle?.readabilityHandler = nil
 
-        guard let process else {
-            outputHandle = nil
-            return
-        }
-
-        isStoppingProcess = true
+        connectionState = nil
+        hasReportedFailure = false
+        guard let process else { return }
+        cleanUpProcessLocked(process)
         if process.isRunning {
             process.terminate()
-        } else {
-            cleanUpProcessLocked(process)
+            // The CLI is our child; ensure shutdown does not leave an orphan subscription.
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) {
+                if process.isRunning { Darwin.kill(process.processIdentifier, SIGKILL) }
+            }
         }
     }
 
     private func cleanUpProcessLocked(_ process: Process) {
         guard self.process === process else { return }
 
+        connectionTimeout?.cancel()
+        connectionTimeout = nil
         outputHandle?.readabilityHandler = nil
         try? outputHandle?.close()
         outputHandle = nil
         outputBuffer.removeAll(keepingCapacity: false)
         process.terminationHandler = nil
         self.process = nil
-        isStoppingProcess = false
     }
 }

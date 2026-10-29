@@ -23,6 +23,10 @@ class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
         eventMonitor?.startMonitoring(onChange: onChange)
     }
 
+    func checkConnection() {
+        eventMonitor?.checkConnection()
+    }
+
     func stopMonitoring() {
         eventMonitor?.stopMonitoring()
     }
@@ -32,6 +36,8 @@ class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
             let spacesSnapshot = fetchSpaces(),
             let windows = fetchWindows()
         else {
+            supportsWorkspaceFocusMetadata = nil
+            supportsWindowAppIdentityMetadata = nil
             return nil
         }
         let spaces = spacesSnapshot.spaces
@@ -72,20 +78,7 @@ class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
     }
 
     private func runAerospaceCommand(arguments: [String]) -> Data? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executablePath)
-        process.arguments = arguments
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        do {
-            try process.run()
-        } catch {
-            print("Aerospace error: \(error)")
-            return nil
-        }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return data
+        try? SpacesCommand.run(executablePath: executablePath, arguments: arguments)
     }
 
     private func fetchSpaces() -> (
@@ -104,7 +97,6 @@ class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
                     spaces.first(where: { $0.isFocused })?.id
                 )
             }
-            supportsWorkspaceFocusMetadata = false
         }
 
         if spaces == nil {
@@ -115,6 +107,7 @@ class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
         guard var spaces else {
             return nil
         }
+        supportsWorkspaceFocusMetadata = false
         let focusedSpaceId = fetchFocusedSpace()?.id
         for i in 0..<spaces.count {
             spaces[i].isFocused = (spaces[i].id == focusedSpaceId)
@@ -149,13 +142,14 @@ class AerospaceSpacesProvider: SpacesProvider, SwitchableSpacesProvider,
                 supportsWindowAppIdentityMetadata = true
                 return windows
             }
-            supportsWindowAppIdentityMetadata = false
         }
 
-        return fetchWindows(arguments: [
+        let windows = fetchWindows(arguments: [
             "list-windows", "--all", "--json", "--format",
             "%{window-id} %{app-name} %{window-title} %{workspace}",
         ])
+        if windows != nil { supportsWindowAppIdentityMetadata = false }
+        return windows
     }
 
     private func fetchWindows(arguments: [String]) -> [AeroWindow]? {
