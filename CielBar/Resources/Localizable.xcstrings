@@ -635,6 +635,12 @@
         }
       }
     },
+    "Reconnecting to window manager" : {
+
+    },
+    "Reconnecting to window manager…" : {
+
+    },
     "RSSI: %lld" : {
       "localizations" : {
         "ar" : {

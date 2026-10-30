@@ -64,7 +64,7 @@ struct NetworkWidget: View {
         switch viewModel.ethernetState {
         case .connected:
             return Image(systemName: "network")
-                .foregroundColor(.primary)
+                .foregroundColor(.foregroundOutside)
         case .connectedWithoutInternet:
             return Image(systemName: "network")
                 .foregroundColor(.yellow)
